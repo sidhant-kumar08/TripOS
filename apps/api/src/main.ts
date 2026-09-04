@@ -3,9 +3,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { Logger } from 'nestjs-pino';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  app.useLogger(app.get(Logger));
 
   // Middleware
   app.use(cookieParser());
@@ -36,9 +40,12 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.useGlobalFilters(app.get(AllExceptionsFilter));
+
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`✨ TripOS API running at http://localhost:${port}`);
+
+  app.get(Logger).log(`TripOS API running at http://localhost:${port}`);
 }
 
 bootstrap().catch((err) => {
