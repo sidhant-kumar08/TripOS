@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.6%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.6%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.6%;
+
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+
+    --accent: 0 0% 9.0%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.6%;
+
+    --radius: 0.5rem;
+
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.3% 65.1%;
+
+    --accent: 210 40% 98%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    background:
+      radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 35%),
+      linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.18);
+  }
+
+  a {
+    @apply transition-colors;
+  }
+}
+
+@layer components {
+  .trip-input {
+    @apply w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10;
+  }
+
+  .trip-button {
+    @apply inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:scale-[1.01] hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-4 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .trip-button-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-500/10;
+  }
+
+  .trip-card {
+    @apply rounded-3xl border border-white/70 bg-white/85 p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)] backdrop-blur;
+  }
+
+  .trip-card-hover {
+    @apply transition hover:-translate-y-0.5 hover:shadow-[0_30px_80px_-35px_rgba(15,23,42,0.4)];
+  }
+
+  .trip-badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide;
+  }
+}

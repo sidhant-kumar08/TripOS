@@ -1,0 +1,32 @@
+{
+  "name": "tripos",
+  "version": "0.1.0",
+  "description": "Group trip operating system for friends",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @tripos/database db:generate",
+    "db:migrate": "pnpm --filter @tripos/database db:migrate",
+    "db:migrate:dev": "pnpm --filter @tripos/database db:migrate:dev",
+    "db:push": "pnpm --filter @tripos/database db:push",
+    "db:seed": "pnpm --filter @tripos/database db:seed",
+    "db:studio": "pnpm --filter @tripos/database db:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

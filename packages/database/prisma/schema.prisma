@@ -1,0 +1,334 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Auth Module
+// ============================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  passwordHash String?
+  
+  // OAuth providers
+  googleId  String?  @unique
+  appleId   String?  @unique
+  facebookId String? @unique
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  sessions  Session[]
+  tripRoles TripRole[]
+  expenses  Expense[] @relation("expensePayer")
+  expenseSplits ExpenseSplit[]
+  tasks     Task[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Session data
+  accessToken String?
+  refreshToken String?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ============================================================================
+// Trips & Membership Module
+// ============================================================================
+
+model Trip {
+  id        String   @id @default(cuid())
+  creatorId String
+  
+  // Trip metadata
+  name      String
+  description String?
+  destination String?
+  startDate DateTime?
+  endDate   DateTime?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  members   TripRole[]
+  activities Activity[]
+  expenses  Expense[]
+  tasks     Task[]
+  vault     TripVault?
+  expenseBalances ExpenseBalance[]
+
+  @@map("trips")
+}
+
+model TripRole {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Role and permissions
+  role      TripRoleEnum @default(MEMBER)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([tripId, userId])
+  @@index([tripId])
+  @@index([userId])
+  @@map("trip_roles")
+}
+
+enum TripRoleEnum {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+model TripInvitation {
+  id        String   @id @default(cuid())
+  tripId    String
+  email     String
+  
+  // Invitation state
+  token     String   @unique
+  usedAt    DateTime?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  
+  @@unique([tripId, email])
+  @@map("trip_invitations")
+}
+
+// ============================================================================
+// Itinerary Module
+// ============================================================================
+
+model Activity {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  // Activity data
+  title     String
+  description String?
+  location  String?
+  
+  // Schedule
+  startTime DateTime
+  endTime   DateTime?
+  
+  // Participants
+  participants ActivityParticipant[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([tripId])
+  @@map("activities")
+}
+
+model ActivityParticipant {
+  id        String   @id @default(cuid())
+  activityId String
+  activity  Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  tripId    String
+  userId    String
+  
+  // Status
+  status    ParticipantStatusEnum @default(ATTENDING)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([activityId, userId])
+  @@map("activity_participants")
+}
+
+enum ParticipantStatusEnum {
+  ATTENDING
+  NOT_ATTENDING
+  MAYBE
+}
+
+// ============================================================================
+// Tasks Module
+// ============================================================================
+
+model Task {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  creatorId String
+  creator   User     @relation(fields: [creatorId], references: [id])
+  
+  // Task data
+  title     String
+  description String?
+  
+  // Assignment
+  assignedTo String?
+  
+  // Status
+  status    TaskStatusEnum @default(OPEN)
+  dueDate   DateTime?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([tripId])
+  @@index([creatorId])
+  @@map("tasks")
+}
+
+enum TaskStatusEnum {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================================================
+// Expenses & Settlements Module
+// ============================================================================
+
+model Expense {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  payerId   String
+  payer     User     @relation("expensePayer", fields: [payerId], references: [id])
+  
+  // Expense data
+  description String
+  amount      Int @db.Integer // stored in cents
+  currency    String @default("USD")
+  
+  // Splits
+  splits    ExpenseSplit[]
+  
+  // Idempotency
+  idempotencyKey String? @unique
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([tripId])
+  @@index([payerId])
+  @@map("expenses")
+}
+
+model ExpenseSplit {
+  id        String   @id @default(cuid())
+  expenseId String
+  expense   Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Split amount (in cents)
+  amount    Int @db.Integer
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@unique([expenseId, userId])
+  @@map("expense_splits")
+}
+
+model ExpenseBalance {
+  id        String   @id @default(cuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  // Parties involved
+  fromUserId String
+  toUserId   String
+  
+  // Balance (in cents, positive means fromUser owes toUser)
+  balance   Int @db.Integer
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([tripId, fromUserId, toUserId])
+  @@index([tripId])
+  @@map("expense_balances")
+}
+
+// ============================================================================
+// Trip Vault Module
+// ============================================================================
+
+model TripVault {
+  id        String   @id @default(cuid())
+  tripId    String   @unique
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  // Files
+  files     VaultFile[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("trip_vaults")
+}
+
+model VaultFile {
+  id        String   @id @default(cuid())
+  vaultId   String
+  vault     TripVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  
+  // File metadata
+  name      String
+  mimeType  String
+  size      Int
+  
+  // Storage reference (S3 key or similar)
+  storageKey String @unique
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@index([vaultId])
+  @@map("vault_files")
+}
