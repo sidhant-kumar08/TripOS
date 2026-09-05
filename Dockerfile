@@ -11,10 +11,10 @@ RUN npm install -g pnpm@9
 COPY . .
 
 # Install dependencies across monorepo
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --no-frozen-lockfile
 
-# Generate Prisma Client
-RUN pnpm --filter @tripos/database exec prisma generate --schema=packages/database/prisma/schema.prisma
+# Generate Prisma Client (running inside packages/database context)
+RUN pnpm --filter @tripos/database exec prisma generate --schema=prisma/schema.prisma
 
 # Build API application
 RUN pnpm --filter @tripos/api build
@@ -24,4 +24,4 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "pnpm --filter @tripos/database exec prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "pnpm --filter @tripos/database exec prisma db push --schema=prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
