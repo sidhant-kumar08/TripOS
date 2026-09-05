@@ -1,11 +1,11 @@
 services:
   - type: web
     name: tripos-api
-    runtime: node
+    runtime: docker
     plan: free
     region: oregon
-    buildCommand: npm install -g pnpm && pnpm install && pnpm db:generate && pnpm --filter @tripos/api build
-    startCommand: pnpm --filter @tripos/api start:prod
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
       - key: NODE_ENV
         value: production
