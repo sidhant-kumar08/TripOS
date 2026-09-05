@@ -384,7 +384,7 @@ function ProfileContent() {
                 <ImageIcon className="h-3.5 w-3.5 text-slate-400" />
                 Or Paste Custom Image URL
               </span>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   type="url"
                   placeholder="https://example.com/my-photo.jpg"
@@ -398,8 +398,9 @@ function ProfileContent() {
                   size="sm"
                   onClick={handleApplyCustomUrl}
                   disabled={!customAvatarUrl.trim()}
+                  className="shrink-0"
                 >
-                  Apply
+                  Apply URL
                 </Button>
               </div>
             </div>

@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Clock,
   User,
+  UserCheck,
+  Users,
   ArrowUpRight,
   ArrowDownLeft,
 } from 'lucide-react';
@@ -47,6 +49,11 @@ interface Expense {
   amount: number;
   payerId: string;
   payer?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
+  addedBy?: {
     id: string;
     name?: string;
     email?: string;
@@ -115,6 +122,7 @@ export default function ExpensesPage() {
   const [currency, setCurrency] = useState('INR');
   const [payerId, setPayerId] = useState<string>('');
   const [borrowerId, setBorrowerId] = useState<string>('');
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
   const [changeReason, setChangeReason] = useState('');
@@ -169,6 +177,7 @@ export default function ExpensesPage() {
     setCategory(mode);
     if (user?.id) setPayerId(user.id);
     if (prefillToUser) setBorrowerId(prefillToUser);
+    setSelectedParticipantIds(tripMembers.map((m: any) => m.userId || m.id));
     setIsModalOpen(true);
   };
 
@@ -189,6 +198,9 @@ export default function ExpensesPage() {
       }
     } else {
       const splits = expense.splits || [];
+      const participantIds = splits.map((s) => s.userId);
+      setSelectedParticipantIds(participantIds);
+
       const isEq = splits.length > 0 && splits.every((s) => Math.abs(s.amount - splits[0].amount) <= 1);
       setSplitType(isEq ? 'equal' : 'custom');
 
@@ -231,11 +243,15 @@ export default function ExpensesPage() {
         return;
       }
 
-      const activeMembers = tripMembers.length > 0 ? tripMembers : [{ userId: user?.id || 'current_user' }];
+      let activeParticipants = tripMembers.filter((m: any) => selectedParticipantIds.includes(m.userId || m.id));
+      if (activeParticipants.length === 0) {
+        activeParticipants = tripMembers.length > 0 ? tripMembers : [{ userId: user?.id || 'current_user' }];
+      }
+
       let splits: ExpenseSplit[] = [];
 
       if (category === 'LEND_BORROW' || category === 'SETTLEMENT') {
-        const targetBorrower = borrowerId || (activeMembers.find((m: any) => (m.userId || m.id) !== payerId)?.userId || payerId);
+        const targetBorrower = borrowerId || (tripMembers.find((m: any) => (m.userId || m.id) !== payerId)?.userId || payerId);
         splits = [
           {
             userId: targetBorrower,
@@ -243,15 +259,15 @@ export default function ExpensesPage() {
           },
         ];
       } else if (splitType === 'equal') {
-        const splitAmount = Math.round(parsedAmount / activeMembers.length);
-        const remainder = parsedAmount - splitAmount * activeMembers.length;
+        const splitAmount = Math.round(parsedAmount / activeParticipants.length);
+        const remainder = parsedAmount - splitAmount * activeParticipants.length;
 
-        splits = activeMembers.map((m: any, idx: number) => ({
+        splits = activeParticipants.map((m: any, idx: number) => ({
           userId: m.userId || m.id,
           amount: idx === 0 ? splitAmount + remainder : splitAmount,
         }));
       } else {
-        splits = activeMembers.map((m: any) => {
+        splits = activeParticipants.map((m: any) => {
           const uid = m.userId || m.id;
           const userVal = parseFloat(customSplits[uid] || '0');
           return {
@@ -310,6 +326,7 @@ export default function ExpensesPage() {
     setCategory('EXPENSE');
     setPayerId(user?.id || '');
     setBorrowerId('');
+    setSelectedParticipantIds(tripMembers.map((m: any) => m.userId || m.id));
     setSplitType('equal');
     setCustomSplits({});
     setChangeReason('');
@@ -363,7 +380,7 @@ export default function ExpensesPage() {
       }
     >
       {/* Streamlined Metrics Summary */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
         <StatCard
           label="Total Trip Spend"
           value={formatCurrency(totalTripSpend, primaryCurrency)}
@@ -408,7 +425,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Segmented Navigation Switcher */}
-      <div className="mb-6 flex flex-wrap rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-fit gap-1">
+      <div className="mb-6 flex overflow-x-auto scrollbar-none rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-full sm:w-fit gap-1">
         <button
           onClick={() => setActiveTab('expenses')}
           className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
@@ -495,12 +512,30 @@ export default function ExpensesPage() {
 
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                         <span>Paid by <strong className="text-slate-700 dark:text-slate-200">{expense.payer?.name || expense.payer?.email || 'Member'}</strong></span>
+                        
+                        {expense.addedBy && expense.addedBy.id !== expense.payerId && (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md font-medium border border-indigo-100 dark:border-indigo-900/40">
+                            <UserCheck className="h-3 w-3" />
+                            Added by {expense.addedBy.name || expense.addedBy.email || 'Admin'}
+                          </span>
+                        )}
+
                         <span>•</span>
                         <span>{formatDate(expense.createdAt)}</span>
                         <span>•</span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {expense.splits?.length || 1} split{(expense.splits?.length || 1) > 1 ? 's' : ''}
-                        </Badge>
+                        
+                        {expense.category === 'EXPENSE' ? (
+                          <span className="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-medium">
+                            For: {expense.splits?.length === tripMembers.length && tripMembers.length > 0
+                              ? `All ${tripMembers.length} members`
+                              : `${expense.splits?.map((s) => s.user?.name || s.user?.email?.split('@')[0] || 'Member').join(', ')} (${expense.splits?.length || 1})`}
+                          </span>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {expense.splits?.length || 1} participant
+                          </Badge>
+                        )}
+
                         {(expense.editCount || 0) > 1 && (
                           <button
                             onClick={() => openHistoryModal(expense)}
@@ -831,9 +866,15 @@ export default function ExpensesPage() {
             </Select>
           </div>
 
+          {/* Admin / Member info note */}
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 text-[11px] text-indigo-700 dark:text-indigo-300">
+            <Users className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+            <span>Admins, owners, or any trip member can record spends paid by any member or on behalf of others.</span>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
-              label={category === 'LEND_BORROW' ? 'Lender (Who Paid) *' : 'Paid By *'}
+              label={category === 'LEND_BORROW' ? 'Lender (Who Paid) *' : 'Paid By (Who Paid) *'}
               value={payerId}
               onChange={(e) => setPayerId(e.target.value)}
             >
@@ -872,7 +913,73 @@ export default function ExpensesPage() {
 
           {category === 'EXPENSE' && (
             <div className="space-y-3 pt-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              {/* Participant Selection ("Who was this for?") */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Who Was This For? ({selectedParticipantIds.length} selected)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedParticipantIds(tripMembers.map((m: any) => m.userId || m.id))}
+                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tripMembers.length > 0) {
+                          setSelectedParticipantIds([payerId || tripMembers[0].userId || tripMembers[0].id]);
+                        }
+                      }}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                    >
+                      Only Payer
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {tripMembers.map((m: any) => {
+                    const uid = m.userId || m.id;
+                    const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
+                    const isSelected = selectedParticipantIds.includes(uid);
+                    return (
+                      <button
+                        key={uid}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            if (selectedParticipantIds.length > 1) {
+                              setSelectedParticipantIds(selectedParticipantIds.filter((id) => id !== uid));
+                            }
+                          } else {
+                            setSelectedParticipantIds([...selectedParticipantIds, uid]);
+                          }
+                        }}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium transition text-left ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200'
+                            : 'border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <div className={`h-4 w-4 rounded flex items-center justify-center border ${
+                          isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-slate-700'
+                        }`}>
+                          {isSelected && <CheckCircle2 className="h-3 w-3" />}
+                        </div>
+                        <span className="truncate">{name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Split Method */}
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 pt-1">
                 Split Method
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -887,9 +994,9 @@ export default function ExpensesPage() {
                 >
                   <div className="text-sm font-semibold">Equal Split</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {amount && !isNaN(parseFloat(amount)) && tripMembers.length > 0
-                      ? `Each pays ${getCurrencySymbol(currency)}${(parseFloat(amount) / tripMembers.length).toFixed(2)}`
-                      : 'Divide evenly across all members'}
+                    {amount && !isNaN(parseFloat(amount)) && selectedParticipantIds.length > 0
+                      ? `Each pays ${getCurrencySymbol(currency)}${(parseFloat(amount) / selectedParticipantIds.length).toFixed(2)} (${selectedParticipantIds.length} member${selectedParticipantIds.length === 1 ? '' : 's'})`
+                      : 'Divide evenly among selected members'}
                   </div>
                 </button>
 
@@ -903,33 +1010,35 @@ export default function ExpensesPage() {
                   }`}
                 >
                   <div className="text-sm font-semibold">Custom Split</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Specify exact amounts per member</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Specify exact amounts per selected member</div>
                 </button>
               </div>
 
               {splitType === 'custom' && (
                 <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
                   <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Enter individual share ({getCurrencySymbol(currency)}):
+                    Enter individual share for selected members ({getCurrencySymbol(currency)}):
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {tripMembers.map((m: any) => {
-                      const uid = m.userId || m.id;
-                      const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
-                      return (
-                        <div key={uid} className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-[120px]">{name}</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={customSplits[uid] || ''}
-                            onChange={(e) => setCustomSplits({ ...customSplits, [uid]: e.target.value })}
-                            className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                          />
-                        </div>
-                      );
-                    })}
+                    {tripMembers
+                      .filter((m: any) => selectedParticipantIds.includes(m.userId || m.id))
+                      .map((m: any) => {
+                        const uid = m.userId || m.id;
+                        const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
+                        return (
+                          <div key={uid} className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-[120px]">{name}</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={customSplits[uid] || ''}
+                              onChange={(e) => setCustomSplits({ ...customSplits, [uid]: e.target.value })}
+                              className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                            />
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}

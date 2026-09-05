@@ -55,13 +55,21 @@ export class ExpensesService {
 
     // Create initial audit log
     try {
+      const creator = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+      const creatorName = creator?.name || creator?.email || 'Trip Member';
+      const payerName = expense.payer?.name || expense.payer?.email || 'Trip Member';
       const formattedAmount = (dto.amount / 100).toFixed(2);
+      
+      const details = userId === payerId
+        ? `Added by ${creatorName} (${dto.description} - ${dto.currency || 'INR'} ${formattedAmount})`
+        : `Added by ${creatorName} on behalf of ${payerName} (${dto.description} - ${dto.currency || 'INR'} ${formattedAmount})`;
+
       await (this.prisma as any).expenseAuditLog.create({
         data: {
           expenseId: expense.id,
           userId,
           action: 'CREATED',
-          details: `Created by ${expense.payer?.name || expense.payer?.email || 'User'} (${dto.description} - ${dto.currency || 'INR'} ${formattedAmount})`,
+          details,
           changes: JSON.stringify({
             amount: (dto.amount / 100).toFixed(2),
             description: dto.description,
@@ -287,14 +295,33 @@ export class ExpensesService {
     });
 
     let auditLogMap = new Map<string, number>();
+    let createdByMap = new Map<string, { id: string; name: string | null; email: string }>();
+
     try {
       const logs = await (this.prisma as any).expenseAuditLog.findMany({
         where: {
           expenseId: { in: expenses.map((e) => e.id) },
         },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
       });
       for (const log of logs) {
         auditLogMap.set(log.expenseId, (auditLogMap.get(log.expenseId) || 0) + 1);
+        if (log.action === 'CREATED' && log.user && !createdByMap.has(log.expenseId)) {
+          createdByMap.set(log.expenseId, {
+            id: log.user.id,
+            name: log.user.name,
+            email: log.user.email,
+          });
+        }
       }
     } catch (e) {
       // Ignore if table not populated
@@ -302,6 +329,11 @@ export class ExpensesService {
 
     return expenses.map((e: any) => ({
       ...this.formatExpense(e),
+      addedBy: createdByMap.get(e.id) || {
+        id: e.payer?.id || e.payerId,
+        name: e.payer?.name || 'Member',
+        email: e.payer?.email || '',
+      },
       editCount: auditLogMap.get(e.id) || 1,
     }));
   }

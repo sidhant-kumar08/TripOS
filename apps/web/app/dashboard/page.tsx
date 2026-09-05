@@ -286,7 +286,7 @@ function DashboardContent() {
       )}
 
       {/* Top Stat Metrics */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total Trips"
           value={trips.length}
@@ -320,7 +320,7 @@ function DashboardContent() {
       {/* Filter and Search Bar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Filter Tabs */}
-        <div className="flex rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-fit">
+        <div className="flex overflow-x-auto scrollbar-none rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-full sm:w-fit gap-1">
           <button
             onClick={() => setFilterTab('all')}
             className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${

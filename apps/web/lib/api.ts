@@ -89,4 +89,17 @@ export const expensesApi = {
   getSettlements: (tripId: string) => api.get(`/trips/${tripId}/expenses/settlement/suggestions`),
 };
 
+export const itineraryApi = {
+  list: (tripId: string) => api.get(`/trips/${tripId}/activities`),
+  create: (tripId: string, data: any) => api.post(`/trips/${tripId}/activities`, data),
+  delete: (tripId: string, activityId: string) => api.delete(`/trips/${tripId}/activities/${activityId}`),
+};
+
+export const tasksApi = {
+  list: (tripId: string) => api.get(`/trips/${tripId}/tasks`),
+  create: (tripId: string, data: any) => api.post(`/trips/${tripId}/tasks`, data),
+  update: (tripId: string, taskId: string, data: any) => api.put(`/trips/${tripId}/tasks/${taskId}`, data),
+  delete: (tripId: string, taskId: string) => api.delete(`/trips/${tripId}/tasks/${taskId}`),
+};
+
 export default api;
