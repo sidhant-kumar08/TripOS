@@ -1,22 +1,27 @@
-FROM node:20-alpine AS base
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-
-FROM base AS builder
+FROM node:20-slim
 WORKDIR /app
+
+# Install OpenSSL for Prisma engine & curl
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN npm install -g pnpm@9
+
+# Copy all repository source files
 COPY . .
-RUN pnpm install --frozen-lockfile=false
-RUN pnpm --filter @tripos/database exec prisma generate --schema=packages/database/prisma/schema.prisma
+
+# Install dependencies across monorepo
+RUN pnpm install --no-frozen-lockfile
+
+# Generate Prisma Client
+RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
+
+# Build API application
 RUN pnpm --filter @tripos/api build
 
-FROM base AS runner
-WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=10000
 
-COPY --from=builder /app /app
-
 EXPOSE 10000
 
-CMD ["sh", "-c", "pnpm --filter @tripos/database exec prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
