@@ -1,19 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Compass, Sparkles, ArrowRight, Lock, Mail, User, Check } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [name, setName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [isLoading, setIsLoading] = React.useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,138 +29,162 @@ export default function RegisterPage() {
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError('Password must be at least 8 characters long');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      await register(email, name, password);
+      await register(email.trim(), name.trim(), password);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[0.95fr_1.05fr]">
-      <section className="order-2 flex items-center justify-center px-4 py-12 sm:px-6 lg:order-1 lg:px-10">
-        <div className="w-full max-w-md trip-card">
-          <div className="mb-8 text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Create account</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Join TripOS</h2>
-            <p className="mt-2 text-sm text-slate-500">Create a workspace for your group trip.</p>
+    <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr] trip-bg-mesh">
+      {/* Visual Brand Panel */}
+      <section className="hidden lg:flex flex-col justify-between p-12 relative overflow-hidden bg-gradient-to-br from-indigo-950 via-slate-950 to-blue-950 text-white">
+        <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl" />
+
+        {/* Top brand */}
+        <Link href="/" className="flex items-center gap-3 relative z-10 w-fit">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur text-white shadow-inner">
+            <Compass className="h-6 w-6 text-white" />
+          </div>
+          <span className="text-2xl font-bold tracking-tight">TripOS</span>
+        </Link>
+
+        {/* Hero content */}
+        <div className="max-w-md space-y-6 relative z-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs font-semibold backdrop-blur text-indigo-200">
+            <Sparkles className="h-3.5 w-3.5" />
+            Modern Group Travel
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight leading-tight">
+            Start your next journey in total sync.
+          </h1>
+          <p className="text-sm text-indigo-200/90 leading-relaxed">
+            Create shared itineraries, split expenses deterministically, and never lose a booking confirmation again.
+          </p>
+
+          <div className="space-y-2.5 pt-4 text-xs text-indigo-100">
+            {['Free group workspaces for friends & family', 'Real-time multi-device itinerary sync', 'Encrypted vault for flight tickets & vouchers'].map((item) => (
+              <div key={item} className="flex items-center gap-2.5">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/30 text-emerald-300">
+                  <Check className="h-3 w-3" />
+                </div>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom review quote */}
+        <div className="relative z-10 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur text-xs text-indigo-200">
+          <p className="italic">
+            &ldquo;Setting up our Europe summer trip took literally 2 minutes. Everyone loved the itinerary.&rdquo;
+          </p>
+          <p className="mt-2 font-semibold text-white">— Lucas & Team (Eurotrip 2026)</p>
+        </div>
+      </section>
+
+      {/* Form Panel */}
+      <section className="flex flex-col justify-between p-6 sm:p-12 relative">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 font-bold text-slate-900 dark:text-white lg:hidden">
+            <Compass className="h-5 w-5 text-indigo-600" />
+            <span>TripOS</span>
+          </Link>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
+        </div>
+
+        <div className="mx-auto w-full max-w-sm my-auto py-8 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Create Account
+            </h2>
+            <p className="mt-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              Set up your TripOS account in 15 seconds.
+            </p>
           </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200">
                 {error}
               </div>
             )}
 
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">Email address</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="trip-input"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
+            <Input
+              type="text"
+              label="Full Name"
+              placeholder="e.g. Alex Morgan"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              icon={<User className="h-4 w-4 shrink-0" />}
+              required
+            />
 
-              <div>
-                <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700">Full name</label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  autoComplete="name"
-                  required
-                  className="trip-input"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
+            <Input
+              type="email"
+              label="Email Address"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              icon={<Mail className="h-4 w-4 shrink-0" />}
+              required
+            />
 
-              <div>
-                <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="trip-input"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <p className="mt-2 text-xs text-slate-500">At least 8 characters</p>
-              </div>
+            <Input
+              type="password"
+              label="Password (min 8 characters)"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              icon={<Lock className="h-4 w-4 shrink-0" />}
+              required
+            />
 
-              <div>
-                <label htmlFor="confirmPassword" className="mb-2 block text-sm font-medium text-slate-700">Confirm password</label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="trip-input"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
-              </div>
-            </div>
+            <Input
+              type="password"
+              label="Confirm Password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              icon={<Lock className="h-4 w-4 shrink-0" />}
+              required
+            />
 
-            <button type="submit" disabled={isLoading} className="trip-button w-full">
-              {isLoading ? 'Creating account...' : 'Sign up'}
-            </button>
-
-            <p className="text-center text-sm text-slate-500">
-              Already have an account?{' '}
-              <Link href="/auth/login" className="font-semibold text-blue-600 hover:text-blue-700">
-                Sign in
-              </Link>
-            </p>
+            <Button
+              type="submit"
+              variant="default"
+              size="lg"
+              className="w-full mt-2 shadow-glow-primary"
+              isLoading={isLoading}
+            >
+              Get Started Free
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
           </form>
-        </div>
-      </section>
 
-      <section className="order-1 hidden bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.2),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="flex items-center gap-3 text-lg font-semibold">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-xl backdrop-blur">🧭</span>
-          TripOS
-        </div>
-        <div className="max-w-xl space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200/90">Built for groups</p>
-          <h1 className="text-5xl font-semibold tracking-tight">Plan trips, split costs, and share files with clarity.</h1>
-          <p className="text-lg leading-8 text-slate-200">
-            TripOS keeps travel coordination structured, auditable, and easy to use from desktop or mobile.
+          <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
+            Already have an account?{' '}
+            <Link href="/auth/login" className="font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">
+              Sign in
+            </Link>
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {[
-            ['Fast setup', 'Create a trip in seconds'],
-            ['Secure access', 'Invite-only shared workspace'],
-          ].map(([title, desc]) => (
-            <div key={title} className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="font-semibold">{title}</p>
-              <p className="mt-1 text-sm text-slate-200">{desc}</p>
-            </div>
-          ))}
+
+        <div className="text-center text-[11px] text-slate-400">
+          TripOS Secure Authentication • Encrypted with TLS & JWT
         </div>
       </section>
     </div>

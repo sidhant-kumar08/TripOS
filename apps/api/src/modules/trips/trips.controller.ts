@@ -53,6 +53,12 @@ export class TripsController {
     return this.tripsService.inviteMember(tripId, req.user.sub, dto);
   }
 
+  @Get('invitations/:token')
+  @ApiOperation({ summary: 'Get invitation details by token' })
+  async getInvitation(@Param('token') token: string) {
+    return this.tripsService.getInvitation(token);
+  }
+
   @Post('invitations/accept')
   @UseGuards(JwtGuard)
   @ApiBearerAuth()

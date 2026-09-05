@@ -95,7 +95,11 @@ export class TripsService {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
-        members: true,
+        members: {
+          include: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -110,24 +114,37 @@ export class TripsService {
       );
     }
 
+    const targetEmail = dto.email.toLowerCase().trim();
+
     // Check if user is already a member
     const existingMember = trip.members.find(
-      (m: any) => m.userId === dto.email, // This is simplified - should look up user by email
+      (m: any) => m.user?.email?.toLowerCase() === targetEmail,
     );
     if (existingMember) {
-      throw new BadRequestException('User is already a member');
+      throw new BadRequestException('User is already a member of this trip');
     }
 
     // Generate invitation token
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    const invitation = await this.prisma.tripInvitation.create({
-      data: {
+    const invitation = await this.prisma.tripInvitation.upsert({
+      where: {
+        tripId_email: {
+          tripId,
+          email: targetEmail,
+        },
+      },
+      create: {
         tripId,
-        email: dto.email,
+        email: targetEmail,
         token,
         expiresAt,
+      },
+      update: {
+        token,
+        expiresAt,
+        usedAt: null,
       },
     });
 
@@ -136,6 +153,45 @@ export class TripsService {
       email: invitation.email,
       token: invitation.token,
       expiresAt: invitation.expiresAt,
+    };
+  }
+
+  async getInvitation(token: string) {
+    const invitation = await this.prisma.tripInvitation.findUnique({
+      where: { token },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: invitation.tripId },
+      include: {
+        members: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!trip) {
+      throw new NotFoundException('Associated trip not found');
+    }
+
+    return {
+      id: invitation.id,
+      email: invitation.email,
+      tripId: invitation.tripId,
+      tripName: trip.name,
+      destination: trip.destination,
+      description: trip.description,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      membersCount: trip.members.length,
+      isExpired: new Date() > invitation.expiresAt,
+      isUsed: !!invitation.usedAt,
     };
   }
 
@@ -156,25 +212,41 @@ export class TripsService {
       throw new BadRequestException('Invitation has expired');
     }
 
-    // Get user email to verify it matches
+    // Get user email to verify it matches (if invitation had specific target email)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
-    if (!user || user.email !== invitation.email) {
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (invitation.email && user.email.toLowerCase() !== invitation.email.toLowerCase()) {
       throw new ForbiddenException(
-        'Invitation email does not match your account',
+        `This invitation was sent to ${invitation.email}. You are currently logged in as ${user.email}.`,
       );
     }
 
-    // Add user to trip
-    await this.prisma.tripRole.create({
-      data: {
-        tripId: invitation.tripId,
-        userId,
-        role: 'MEMBER',
+    // Check if user is already a member
+    const existingRole = await this.prisma.tripRole.findUnique({
+      where: {
+        tripId_userId: {
+          tripId: invitation.tripId,
+          userId,
+        },
       },
     });
+
+    if (!existingRole) {
+      // Add user to trip
+      await this.prisma.tripRole.create({
+        data: {
+          tripId: invitation.tripId,
+          userId,
+          role: 'MEMBER',
+        },
+      });
+    }
 
     // Mark invitation as used
     await this.prisma.tripInvitation.update({

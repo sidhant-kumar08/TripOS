@@ -1,13 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
+import {
+  Calendar,
+  DollarSign,
+  FileText,
+  ArrowRight,
+  UserPlus,
+  Copy,
+  Check,
+  Mail,
+} from 'lucide-react';
 import { ProtectedRoute } from '@/lib/protected-route';
 import { tripsApi } from '@/lib/api';
-import { useAuth } from '@/lib/auth-context';
 import { PageShell } from '@/components/ui/page-shell';
-import { Card } from '@/components/ui/controls';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
+import { formatDate, getInitials } from '@/lib/utils';
+
+interface TripMember {
+  userId: string;
+  role: 'OWNER' | 'EDITOR' | 'MEMBER';
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
 
 interface Trip {
   id: string;
@@ -16,35 +40,38 @@ interface Trip {
   destination?: string;
   startDate?: string;
   endDate?: string;
-  members: any[];
+  members: TripMember[];
 }
 
 export default function TripDetailPage() {
   return (
     <ProtectedRoute>
-      <TripDetail />
+      <TripDetailContent />
     </ProtectedRoute>
   );
 }
 
-function TripDetail() {
+function TripDetailContent() {
   const router = useRouter();
   const params = useParams();
-  const { user } = useAuth();
   const tripId = params.tripId as string;
 
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteMessage, setInviteMessage] = useState('');
-  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [trip, setTrip] = React.useState<Trip | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isInviteModalOpen, setIsInviteModalOpen] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState('');
+  const [inviteStatus, setInviteStatus] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isInviting, setIsInviting] = React.useState(false);
+  const [copiedLink, setCopiedLink] = React.useState(false);
+  const [generatedInviteUrl, setGeneratedInviteUrl] = React.useState<string | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadTrip();
   }, [tripId]);
 
   const loadTrip = async () => {
     try {
+      setIsLoading(true);
       const response = await tripsApi.getById(tripId);
       setTrip(response.data);
     } catch (error) {
@@ -60,111 +87,321 @@ function TripDetail() {
     if (!inviteEmail.trim()) return;
 
     try {
-      await tripsApi.invite(tripId, inviteEmail);
-      setInviteMessage(`Invitation sent to ${inviteEmail}`);
-      setInviteEmail('');
-      setTimeout(() => setInviteMessage(''), 3000);
+      setIsInviting(true);
+      setInviteStatus(null);
+      const res = await tripsApi.invite(tripId, inviteEmail.trim());
+      const inviteUrl = `${window.location.origin}/invite/${res.data.token}`;
+      setGeneratedInviteUrl(inviteUrl);
+      setInviteStatus({
+        type: 'success',
+        message: `Invitation generated for ${inviteEmail}!`,
+      });
+      loadTrip();
     } catch (error: any) {
-      setInviteMessage(
-        error.response?.data?.message || 'Failed to send invitation'
-      );
+      setInviteStatus({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to send invitation',
+      });
+    } finally {
+      setIsInviting(false);
     }
+  };
+
+  const copyGeneratedLink = () => {
+    if (generatedInviteUrl && typeof window !== 'undefined') {
+      navigator.clipboard.writeText(generatedInviteUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const openInviteModal = () => {
+    setIsInviteModalOpen(true);
+    setInviteStatus(null);
+    setGeneratedInviteUrl(null);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Loading trip...</p>
-      </div>
+      <PageShell
+        title="Loading trip workspace..."
+        breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Trip Overview' }]}
+      >
+        <div className="trip-glass-card rounded-2xl p-12 text-center animate-pulse">
+          <p className="text-sm text-slate-500">Loading trip details and itinerary...</p>
+        </div>
+      </PageShell>
     );
   }
 
   if (!trip) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Trip not found</p>
-      </div>
+      <PageShell
+        title="Trip not found"
+        backHref="/dashboard"
+        backLabel="Return to Dashboard"
+      >
+        <div className="trip-glass-card rounded-2xl p-8 text-center">
+          <p className="text-slate-600 dark:text-slate-400">The requested trip workspace could not be found.</p>
+        </div>
+      </PageShell>
     );
   }
 
-  const isOwner = trip.members.some(
-    (m) => m.userId === user?.id && m.role === 'OWNER'
-  );
-
   return (
-    <PageShell title={trip.name} subtitle={trip.destination ? `📍 ${trip.destination}` : 'Trip workspace overview'} backHref="/dashboard" backLabel="Back to dashboard">
-      <div className="grid gap-8 lg:grid-cols-[1.4fr_0.8fr]">
-        <div className="space-y-8">
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-900">Trip Details</h2>
-            <dl className="mt-4 space-y-5 text-sm">
-              {trip.description && (
-                <div>
-                  <dt className="font-medium text-slate-900">Description</dt>
-                  <dd className="mt-1 text-slate-600">{trip.description}</dd>
-                </div>
-              )}
-              {trip.startDate && (
-                <div>
-                  <dt className="font-medium text-slate-900">Dates</dt>
-                  <dd className="mt-1 text-slate-600">
-                    {new Date(trip.startDate).toLocaleDateString()}
-                    {trip.endDate && ` → ${new Date(trip.endDate).toLocaleDateString()}`}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              ['🗺️ Itinerary', 'Build activities and assign tasks.', `/trips/${tripId}/itinerary`],
-              ['💸 Expenses', 'Track splits and settlement.', `/trips/${tripId}/expenses`],
-              ['📁 Vault', 'Store trip files securely.', `/trips/${tripId}/vault`],
-            ].map(([title, desc, href]) => (
-              <Link key={title} href={href} className="trip-card trip-card-hover block">
-                <p className="text-lg font-semibold text-slate-900">{title}</p>
-                <p className="mt-2 text-sm text-slate-600">{desc}</p>
-                <p className="mt-5 text-sm font-semibold text-blue-600">Open →</p>
-              </Link>
-            ))}
-          </div>
+    <PageShell
+      title={trip.name}
+      subtitle={trip.destination ? `📍 ${trip.destination}` : 'Collaborative trip workspace'}
+      breadcrumbs={[
+        { label: 'Dashboard', href: '/dashboard' },
+        { label: trip.name },
+      ]}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button onClick={openInviteModal} variant="default" size="sm">
+            <UserPlus className="h-4 w-4 mr-1" />
+            Invite Member
+          </Button>
         </div>
-
-        <Card>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">Members</h2>
-            {isOwner && (
-              <button onClick={() => setShowInviteForm(!showInviteForm)} className="trip-button-secondary px-3 py-2 text-xs">
-                + Invite
-              </button>
+      }
+    >
+      {/* Trip Quick Info Banner */}
+      <div className="mb-8 trip-glass-card rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-violet-600/10 border-indigo-200/60 dark:border-indigo-900/50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="accent">Active Workspace</Badge>
+              {trip.startDate && (
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                  📅 {formatDate(trip.startDate)} {trip.endDate ? `→ ${formatDate(trip.endDate)}` : ''}
+                </span>
+              )}
+            </div>
+            {trip.description && (
+              <p className="text-sm text-slate-700 dark:text-slate-300 max-w-2xl leading-relaxed">
+                {trip.description}
+              </p>
             )}
           </div>
 
-          {showInviteForm && (
-            <form onSubmit={handleInvite} className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <input type="email" placeholder="Email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="trip-input" />
-              {inviteMessage && <p className="text-xs font-medium text-emerald-600">{inviteMessage}</p>}
-              <div className="flex gap-3">
-                <button type="submit" className="trip-button flex-1 py-2.5 text-xs">Send</button>
-                <button type="button" onClick={() => setShowInviteForm(false)} className="trip-button-secondary flex-1 py-2.5 text-xs">Cancel</button>
+          {/* Members Stack preview */}
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2 overflow-hidden">
+              {trip.members?.map((m) => (
+                <div
+                  key={m.userId}
+                  title={`${m.user.name} (${m.role})`}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-xs font-bold text-white ring-2 ring-white dark:ring-slate-900 shadow-sm"
+                >
+                  {getInitials(m.user.name || m.user.email)}
+                </div>
+              ))}
+            </div>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              {trip.members?.length} {trip.members?.length === 1 ? 'member' : 'members'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3 Main Workspace Feature Gateways */}
+      <div className="mb-8 grid gap-6 md:grid-cols-3">
+        {/* Itinerary Gateway */}
+        <Link
+          href={`/trips/${tripId}/itinerary`}
+          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/60 hover:shadow-xl flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300 mb-4 shadow-inner">
+              <Calendar className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
+              Itinerary & Tasks
+            </h3>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Schedule activities, pin locations, time slots, and assign group tasks.
+            </p>
+          </div>
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+            <span>View Timeline</span>
+            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+          </div>
+        </Link>
+
+        {/* Expenses Gateway */}
+        <Link
+          href={`/trips/${tripId}/expenses`}
+          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-xl flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 mb-4 shadow-inner">
+              <DollarSign className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
+              Expenses & Splits
+            </h3>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Track shared purchases, split costs fairly, and calculate minimal settlement debts.
+            </p>
+          </div>
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <span>Open Ledger</span>
+            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+          </div>
+        </Link>
+
+        {/* Vault Gateway */}
+        <Link
+          href={`/trips/${tripId}/vault`}
+          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-purple-400/60 hover:shadow-xl flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300 mb-4 shadow-inner">
+              <FileText className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">
+              Trip Vault
+            </h3>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Secure repository for flight boarding passes, Airbnb vouchers, and IDs.
+            </p>
+          </div>
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-400">
+            <span>Access Files</span>
+            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
+          </div>
+        </Link>
+      </div>
+
+      {/* Members Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Group Members</CardTitle>
+              <CardDescription>Collaborators with access to this trip workspace</CardDescription>
+            </div>
+            <Button onClick={() => setIsInviteModalOpen(true)} size="sm">
+              <UserPlus className="h-4 w-4 mr-1" />
+              Invite
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {trip.members?.map((member) => (
+              <div
+                key={member.userId}
+                className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 font-bold text-white text-xs">
+                    {getInitials(member.user.name || member.user.email)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white leading-tight">
+                      {member.user.name}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {member.user.email}
+                    </p>
+                  </div>
+                </div>
+
+                <Badge
+                  variant={member.role === 'OWNER' ? 'accent' : 'secondary'}
+                >
+                  {member.role}
+                </Badge>
               </div>
-            </form>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* INVITE MEMBER MODAL */}
+      <Modal
+        isOpen={isInviteModalOpen}
+        onClose={() => {
+          setIsInviteModalOpen(false);
+          setInviteStatus(null);
+          setGeneratedInviteUrl(null);
+        }}
+        title="Invite Friend to Trip"
+        description="They will receive an invitation token to join this shared workspace."
+        maxWidth="md"
+      >
+        <div className="space-y-4 mt-2">
+          {inviteStatus && (
+            <div
+              className={`rounded-xl border p-3 text-xs ${
+                inviteStatus.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-200'
+                  : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200'
+              }`}
+            >
+              {inviteStatus.message}
+            </div>
           )}
 
-          <ul className="mt-5 space-y-3">
-            {trip.members.map((member) => (
-              <li key={member.userId} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm">
-                <div>
-                  <p className="font-medium text-slate-900">{member.user.name}</p>
-                  <p className="text-xs text-slate-500">{member.user.email}</p>
-                </div>
-                <span className="trip-badge bg-slate-100 text-slate-700">{member.role}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
+          {generatedInviteUrl ? (
+            <div className="space-y-3 p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60">
+              <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+                Share this direct invite link with your friend:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedInviteUrl}
+                  className="flex-1 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 dark:border-indigo-800 dark:bg-slate-900 dark:text-slate-200"
+                />
+                <Button onClick={copyGeneratedLink} size="sm" variant="default">
+                  {copiedLink ? <Check className="h-4 w-4 text-white" /> : <Copy className="h-4 w-4" />}
+                  {copiedLink ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                They can open this link to preview and accept the trip invite.
+              </p>
+            </div>
+          ) : null}
+
+          <form onSubmit={handleInvite} className="space-y-4">
+            <Input
+              type="email"
+              label="Friend's Email Address *"
+              placeholder="friend@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              icon={<Mail className="h-4 w-4" />}
+              required
+            />
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setIsInviteModalOpen(false);
+                  setInviteStatus(null);
+                  setGeneratedInviteUrl(null);
+                }}
+              >
+                Close
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                isLoading={isInviting}
+              >
+                Generate Invite Link
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Modal>
     </PageShell>
   );
 }

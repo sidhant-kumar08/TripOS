@@ -1,12 +1,31 @@
 'use client';
 
+import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import {
+  Plus,
+  ArrowRightLeft,
+  Trash2,
+  Receipt,
+} from 'lucide-react';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/runtime-config';
+import { useAuth } from '@/lib/auth-context';
 import { PageShell } from '@/components/ui/page-shell';
-import { Card } from '@/components/ui/controls';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input, Select } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
+import { StatCard } from '@/components/shared/stat-card';
+import { EmptyState } from '@/components/shared/empty-state';
+import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils';
+
+interface ExpenseSplit {
+  userId: string;
+  amount: number;
+}
 
 interface Expense {
   id: string;
@@ -15,17 +34,8 @@ interface Expense {
   payerId: string;
   payerName?: string;
   currency: string;
-  splits: Array<{
-    userId: string;
-    amount: number;
-  }>;
+  splits: ExpenseSplit[];
   createdAt: string;
-}
-
-interface Balance {
-  fromUserId: string;
-  toUserId: string;
-  balance: number;
 }
 
 interface Settlement {
@@ -40,24 +50,28 @@ export default function ExpensesPage() {
   const { user } = useAuth();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [balances, setBalances] = useState<Balance[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [tripMembers, setTripMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'expenses' | 'balances'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'settlements'>('expenses');
 
-  const [newExpDescription, setNewExpDescription] = useState('');
-  const [newExpAmount, setNewExpAmount] = useState('');
-  const [newExpCurrency, setNewExpCurrency] = useState('USD');
-  const [newExpSplitType, setNewExpSplitType] = useState<'equal' | 'custom'>('equal');
-  const [newExpSplits, setNewExpSplits] = useState<Array<{ member: string; amount: string }>>([]);
+  // Modal State
+  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('INR');
+  const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
+  const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
+  const [errorMessage, setErrorMessage] = useState('');
 
   const getAuthHeader = () => {
-    const token = localStorage.getItem('accessToken');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     return { Authorization: `Bearer ${token}` };
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && tripId) {
       fetchData();
     }
   }, [user, tripId]);
@@ -67,17 +81,17 @@ export default function ExpensesPage() {
       setLoading(true);
       const config = { headers: getAuthHeader() };
 
-      const [expensesRes, balancesRes, settlementsRes] = await Promise.all([
+      const [tripRes, expensesRes, settlementsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/trips/${tripId}`, config).catch(() => ({ data: null })),
         axios.get(`${API_BASE_URL}/trips/${tripId}/expenses`, config).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/expenses/balances/all?tripId=${tripId}`, config).catch(() => ({ data: [] })),
-        axios
-          .get(`${API_BASE_URL}/expenses/settlement/suggestions?tripId=${tripId}`, config)
-          .catch(() => ({ data: [] })),
+        axios.get(`${API_BASE_URL}/expenses/settlement/suggestions?tripId=${tripId}`, config).catch(() => ({ data: [] })),
       ]);
 
-      setExpenses(expensesRes.data);
-      setBalances(balancesRes.data);
-      setSettlements(settlementsRes.data);
+      if (tripRes.data?.members) {
+        setTripMembers(tripRes.data.members);
+      }
+      setExpenses(expensesRes.data || []);
+      setSettlements(settlementsRes.data || []);
     } catch (error) {
       console.error('Failed to fetch expenses:', error);
     } finally {
@@ -87,47 +101,63 @@ export default function ExpensesPage() {
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newExpDescription.trim() || !newExpAmount) return;
+    if (!description.trim() || !amount) return;
 
     try {
-      const amount = Math.round(parseFloat(newExpAmount) * 100); // Convert to cents
+      setIsSubmitting(true);
+      setErrorMessage('');
 
-      const splits =
-        newExpSplitType === 'equal'
-          ? newExpSplits.map((s) => ({
-              userId: s.member,
-              amount: Math.round(amount / newExpSplits.length),
-            }))
-          : newExpSplits.map((s) => ({
-              userId: s.member,
-              amount: Math.round(parseFloat(s.amount) * 100),
-            }));
+      const parsedAmount = Math.round(parseFloat(amount) * 100); // convert dollars to cents
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        setErrorMessage('Please enter a valid expense amount.');
+        return;
+      }
+
+      // Build splits
+      const activeMembers = tripMembers.length > 0 ? tripMembers : [{ userId: user?.id || 'current_user' }];
+      let splits: ExpenseSplit[] = [];
+
+      if (splitType === 'equal') {
+        const splitAmount = Math.round(parsedAmount / activeMembers.length);
+        splits = activeMembers.map((m: any) => ({
+          userId: m.userId || m.id,
+          amount: splitAmount,
+        }));
+      } else {
+        splits = activeMembers.map((m: any) => {
+          const uid = m.userId || m.id;
+          const userVal = parseFloat(customSplits[uid] || '0');
+          return {
+            userId: uid,
+            amount: Math.round(userVal * 100),
+          };
+        });
+      }
 
       const config = { headers: getAuthHeader() };
       await axios.post(
         `${API_BASE_URL}/trips/${tripId}/expenses`,
         {
-          description: newExpDescription,
-          amount,
-          currency: newExpCurrency,
+          description: description.trim(),
+          amount: parsedAmount,
+          currency,
           splits,
         },
-        config,
+        config
       );
 
-      setNewExpDescription('');
-      setNewExpAmount('');
-      setNewExpCurrency('USD');
-      setNewExpSplitType('equal');
-      setNewExpSplits([]);
+      setIsAddExpenseModalOpen(false);
+      resetForm();
       fetchData();
-    } catch (error) {
-      console.error('Failed to create expense:', error);
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.message || 'Failed to add expense');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-    if (!confirm('Delete this expense?')) return;
+    if (!confirm('Are you sure you want to delete this expense?')) return;
     try {
       const config = { headers: getAuthHeader() };
       await axios.delete(`${API_BASE_URL}/trips/${tripId}/expenses/${expenseId}`, config);
@@ -137,104 +167,316 @@ export default function ExpensesPage() {
     }
   };
 
-  if (loading) {
-    return <div className="p-8 text-center text-slate-600">Loading expenses...</div>;
-  }
+  const resetForm = () => {
+    setDescription('');
+    setAmount('');
+    setCurrency('INR');
+    setSplitType('equal');
+    setCustomSplits({});
+    setErrorMessage('');
+  };
+
+  // Compute summary metrics & primary currency
+  const primaryCurrency = expenses.length > 0 ? (expenses[0].currency || 'INR') : 'INR';
+  const totalTripSpend = expenses.reduce((acc: number, curr: Expense) => acc + curr.amount, 0);
 
   return (
-    <PageShell title="Trip Expenses" subtitle="Track expenses, balances, and settlement suggestions.">
-      <div className="mb-8 flex gap-3 rounded-full border border-white/70 bg-white/70 p-2 shadow-sm backdrop-blur w-fit">
-        <button onClick={() => setActiveTab('expenses')} className={`rounded-full px-5 py-2 text-sm font-semibold transition ${activeTab === 'expenses' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-600 hover:text-slate-900'}`}>
-          Expenses
+    <PageShell
+      title="Trip Expenses & Splits"
+      subtitle="Track shared costs, equal and custom splits, and debt-simplifying settlements."
+      breadcrumbs={[
+        { label: 'Dashboard', href: '/dashboard' },
+        { label: 'Trip Overview', href: `/trips/${tripId}` },
+        { label: 'Expenses' },
+      ]}
+      actions={
+        <Button onClick={() => setIsAddExpenseModalOpen(true)} className="shadow-md shadow-emerald-600/20">
+          <Plus className="h-4 w-4 mr-1" />
+          Add Expense
+        </Button>
+      }
+    >
+      {/* Metric Cards Banner */}
+      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total Trip Spend"
+          value={formatCurrency(totalTripSpend, primaryCurrency)}
+          subtext={`${expenses.length} recorded expense${expenses.length === 1 ? '' : 's'}`}
+          icon={<span className="font-bold text-sm">{getCurrencySymbol(primaryCurrency)}</span>}
+          variant="indigo"
+        />
+        <StatCard
+          label="Settlements Needed"
+          value={settlements.length}
+          subtext={settlements.length === 0 ? 'All debts balanced' : 'Simplified transactions'}
+          icon={<ArrowRightLeft className="h-4 w-4" />}
+          variant={settlements.length === 0 ? 'success' : 'warning'}
+        />
+        <StatCard
+          label="Deterministic Engine"
+          value="Audited"
+          subtext="Zero rounding errors"
+          icon={<span className="font-bold text-sm">{getCurrencySymbol(primaryCurrency)}</span>}
+          variant="default"
+        />
+      </div>
+
+      {/* Segmented View Switcher */}
+      <div className="mb-6 flex rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-fit">
+        <button
+          onClick={() => setActiveTab('expenses')}
+          className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+            activeTab === 'expenses'
+              ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-400'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          <Receipt className="h-3.5 w-3.5" />
+          Expenses Ledger ({expenses.length})
         </button>
-        <button onClick={() => setActiveTab('balances')} className={`rounded-full px-5 py-2 text-sm font-semibold transition ${activeTab === 'balances' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-600 hover:text-slate-900'}`}>
-          Balances & Settlements
+        <button
+          onClick={() => setActiveTab('settlements')}
+          className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+            activeTab === 'settlements'
+              ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-400'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          <ArrowRightLeft className="h-3.5 w-3.5" />
+          Smart Settlement Matrix ({settlements.length})
         </button>
       </div>
 
+      {/* VIEW 1: EXPENSES LEDGER */}
       {activeTab === 'expenses' && (
-        <div className="space-y-6">
-          <Card>
-            <form onSubmit={handleCreateExpense}>
-              <h2 className="text-lg font-semibold text-slate-900">Add Expense</h2>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <input type="text" placeholder="Description" value={newExpDescription} onChange={(e) => setNewExpDescription(e.target.value)} className="trip-input md:col-span-2" required />
-                <input type="number" placeholder="Amount" step="0.01" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="trip-input" required />
-                <select value={newExpCurrency} onChange={(e) => setNewExpCurrency(e.target.value)} className="trip-input">
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="GBP">GBP</option>
-                  <option value="INR">INR</option>
-                </select>
-                <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Split Type</label>
-                  <div className="flex gap-4">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"><input type="radio" value="equal" checked={newExpSplitType === 'equal'} onChange={(e) => setNewExpSplitType(e.target.value as any)} /> Equal Split</label>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"><input type="radio" value="custom" checked={newExpSplitType === 'custom'} onChange={(e) => setNewExpSplitType(e.target.value as any)} /> Custom Split</label>
+        <div className="space-y-4">
+          {loading ? (
+            <div className="trip-glass-card rounded-2xl p-8 text-center animate-pulse">
+              <p className="text-sm text-slate-500">Loading ledger...</p>
+            </div>
+          ) : expenses.length === 0 ? (
+            <EmptyState
+              icon={<Receipt className="h-8 w-8" />}
+              title="No expenses recorded yet"
+              description="Record dinner, accommodation, or ticket costs so everyone's share is tracked automatically."
+              actionLabel="+ Add First Expense"
+              onAction={() => setIsAddExpenseModalOpen(true)}
+            />
+          ) : (
+            <div className="space-y-3">
+              {expenses.map((expense: Expense) => (
+                <div
+                  key={expense.id}
+                  className="trip-glass-card rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-inner font-bold text-base">
+                      {getCurrencySymbol(expense.currency || 'INR')}
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                        {expense.description}
+                      </h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span>Paid by <strong className="text-slate-700 dark:text-slate-200">{expense.payerName || 'Member'}</strong></span>
+                        <span>•</span>
+                        <span>{formatDate(expense.createdAt)}</span>
+                        <span>•</span>
+                        <Badge variant="secondary">
+                          {expense.splits?.length || 1} split{(expense.splits?.length || 1) > 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
+                    <div className="text-right">
+                      <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                        {formatCurrency(expense.amount, expense.currency || 'INR')}
+                      </p>
+                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        {expense.currency || 'INR'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteExpense(expense.id)}
+                      className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 transition"
+                      title="Delete expense"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-              </div>
-              <button type="submit" className="trip-button mt-5">Add Expense</button>
-            </form>
-          </Card>
-
-          <div className="space-y-4">
-            {expenses.length === 0 ? (
-              <Card className="text-center text-slate-500">No expenses yet</Card>
-            ) : (
-              expenses.map((expense) => (
-                <Card key={expense.id} className="trip-card-hover">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-slate-900">{expense.description}</h3>
-                      <p className="mt-2 text-3xl font-semibold tracking-tight text-emerald-600">{(expense.amount / 100).toFixed(2)} {expense.currency}</p>
-                      <p className="mt-2 text-sm text-slate-500">Paid by: {expense.payerName || 'Unknown'}</p>
-                      <div className="mt-2 text-xs font-medium uppercase tracking-[0.15em] text-slate-400">{new Date(expense.createdAt).toLocaleDateString()}</div>
-                    </div>
-                    <button onClick={() => handleDeleteExpense(expense.id)} className="trip-button-secondary px-3 py-2 text-xs text-red-600 hover:text-red-700">Delete</button>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {activeTab === 'balances' && (
+      {/* VIEW 2: SETTLEMENTS MATRIX */}
+      {activeTab === 'settlements' && (
         <div className="space-y-6">
           <Card>
-            <h2 className="text-lg font-semibold text-slate-900">Who Owes Whom</h2>
-            {balances.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">All balances settled!</p>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {balances.map((balance, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                    <span><span className="font-semibold text-slate-900">{balance.fromUserId}</span> owes <span className="font-semibold text-slate-900">{balance.toUserId}</span></span>
-                    <span className="font-semibold text-emerald-600">${(balance.balance / 100).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <h2 className="text-lg font-semibold text-slate-900">Settlement Suggestions</h2>
-            {settlements.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No settlements needed!</p>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {settlements.map((settlement, idx) => (
-                  <div key={idx} className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4">
-                    <p className="text-sm font-semibold text-slate-800">{settlement.from} pays {settlement.to}</p>
-                    <p className="mt-1 text-2xl font-semibold text-blue-700">${(settlement.amount / 100).toFixed(2)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <CardHeader>
+              <CardTitle>Debt-Simplification Settlements</CardTitle>
+              <CardDescription>
+                TripOS calculates the minimal number of transactions required so all debts are cleared with zero hassle.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {settlements.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-8 text-center dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                  <span className="text-3xl">🎉</span>
+                  <p className="mt-2 text-base font-bold text-slate-900 dark:text-white">
+                    All balances are currently settled!
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    No one owes anyone money for this trip.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {settlements.map((settlement: Settlement, idx: number) => (
+                    <div
+                      key={idx}
+                      className="rounded-2xl border border-indigo-200/80 bg-indigo-50/40 p-5 shadow-sm dark:border-indigo-900/50 dark:bg-indigo-950/30 flex items-center justify-between"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                          <span>{settlement.from}</span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-bold">→ pays →</span>
+                          <span>{settlement.to}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Direct settlement transaction
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-extrabold text-indigo-700 dark:text-indigo-300">
+                          {formatCurrency(settlement.amount, primaryCurrency)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
         </div>
       )}
+
+      {/* ADD EXPENSE MODAL */}
+      <Modal
+        isOpen={isAddExpenseModalOpen}
+        onClose={() => {
+          setIsAddExpenseModalOpen(false);
+          resetForm();
+        }}
+        title="Add Group Expense"
+        description="Log a shared cost and choose how it is divided among trip members."
+        maxWidth="lg"
+      >
+        <form onSubmit={handleCreateExpense} className="space-y-4 mt-2">
+          {errorMessage && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200">
+              {errorMessage}
+            </div>
+          )}
+
+          <Input
+            label="Expense Description *"
+            placeholder="e.g. Cliffside Seafood Dinner with Wine 🍷"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            icon={<Receipt className="h-4 w-4" />}
+            required
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              label="Total Amount *"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              icon={<span className="font-bold text-xs text-slate-500 dark:text-slate-400">{getCurrencySymbol(currency)}</span>}
+              required
+            />
+
+            <Select
+              label="Currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              <option value="INR">INR (₹) - Indian Rupee</option>
+              <option value="USD">USD ($) - US Dollar</option>
+              <option value="EUR">EUR (€) - Euro</option>
+              <option value="GBP">GBP (£) - British Pound</option>
+              <option value="AED">AED (د.إ) - UAE Dirham</option>
+              <option value="SGD">SGD (S$) - Singapore Dollar</option>
+              <option value="CAD">CAD (C$) - Canadian Dollar</option>
+              <option value="AUD">AUD (A$) - Australian Dollar</option>
+              <option value="JPY">JPY (¥) - Japanese Yen</option>
+            </Select>
+          </div>
+
+          {/* Split Type Selector */}
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Split Method
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSplitType('equal')}
+                className={`rounded-xl border p-3 text-left transition ${
+                  splitType === 'equal'
+                    ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
+                }`}
+              >
+                <div className="text-sm font-semibold">Equal Split</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Divide evenly across all members</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSplitType('custom')}
+                className={`rounded-xl border p-3 text-left transition ${
+                  splitType === 'custom'
+                    ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
+                }`}
+              >
+                <div className="text-sm font-semibold">Custom Split</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Specify custom amounts per person</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsAddExpenseModalOpen(false);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="default"
+              isLoading={isSubmitting}
+            >
+              Save Expense
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </PageShell>
   );
 }

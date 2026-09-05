@@ -44,6 +44,8 @@ export const tripsApi = {
   getById: (tripId: string) => api.get(`/trips/${tripId}`),
   invite: (tripId: string, email: string) =>
     api.post(`/trips/${tripId}/invite`, { email }),
+  getInvitation: (token: string) =>
+    api.get(`/trips/invitations/${token}`),
   acceptInvitation: (token: string) =>
     api.post('/trips/invitations/accept', { token }),
 };
