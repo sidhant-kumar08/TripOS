@@ -76,30 +76,17 @@ export function Navbar() {
                 </a>
               </>
             ) : isAuthenticated ? (
-              <>
-                <Link
-                  href="/dashboard"
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                    pathname === '/dashboard'
-                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-800 dark:text-indigo-400'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/80'
-                  }`}
-                >
-                  <LayoutDashboard className="h-3.5 w-3.5" />
-                  Dashboard
-                </Link>
-                <Link
-                  href="/profile"
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                    pathname === '/profile'
-                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-800 dark:text-indigo-400'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/80'
-                  }`}
-                >
-                  <UserIcon className="h-3.5 w-3.5" />
-                  Profile
-                </Link>
-              </>
+              <Link
+                href="/dashboard"
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  pathname === '/dashboard'
+                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-800 dark:text-indigo-400'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/80 dark:hover:bg-slate-800/80'
+                }`}
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Trips Workspace
+              </Link>
             ) : null}
           </nav>
 
