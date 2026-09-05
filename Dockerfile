@@ -24,4 +24,4 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "node packages/database/scripts/run-prisma.js db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss || true; node apps/api/dist/main.js"]
+CMD ["node", "apps/api/dist/main.js"]
