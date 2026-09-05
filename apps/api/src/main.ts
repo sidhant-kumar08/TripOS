@@ -45,7 +45,9 @@ async function bootstrap() {
   const port = process.env.PORT || 3001;
   await app.listen(port);
 
-  app.get(Logger).log(`TripOS API running at http://localhost:${port}`);
+  const logger = app.get(Logger);
+  logger.log(`TripOS API running at http://localhost:${port}`, 'Bootstrap');
+  logger.log(`Swagger Docs available at http://localhost:${port}/api/docs`, 'Bootstrap');
 }
 
 bootstrap().catch((err) => {

@@ -30,6 +30,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/shared/navbar';
 import { Badge } from '@/components/ui/badge';
+import { DottedGlobe } from '@/components/ui/dotted-globe';
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils';
 
 // Stagger animation container variants
@@ -407,9 +408,9 @@ export default function LandingPage() {
           {/* Interactive Showcase Frame */}
           <div className="rounded-3xl border border-slate-200/80 bg-white/90 shadow-2xl backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/90 overflow-hidden">
             {/* Top Workspace Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/80 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/60">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 border-b border-slate-200/80 bg-slate-50/80 px-4 sm:px-6 py-3.5 dark:border-slate-800 dark:bg-slate-950/60">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shrink-0">
                   🧭
                 </div>
                 <div>
@@ -426,50 +427,50 @@ export default function LandingPage() {
               </div>
 
               {/* Tab Switcher */}
-              <div className="flex overflow-x-auto scrollbar-none rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 gap-1">
+              <div className="flex items-center overflow-x-auto scrollbar-none rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 gap-1 w-full md:w-auto">
                 <button
                   onClick={() => setActiveDemoTab('itinerary')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition ${
                     activeDemoTab === 'itinerary'
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400 font-bold'
                       : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
-                  <Calendar className="h-3.5 w-3.5" />
-                  Itinerary
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <span>Itinerary</span>
                 </button>
                 <button
                   onClick={() => setActiveDemoTab('expenses')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition ${
                     activeDemoTab === 'expenses'
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400 font-bold'
                       : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
-                  <span className="font-bold text-xs">{getCurrencySymbol(demoCurrency)}</span>
-                  Split & Settle
+                  <span className="font-bold text-xs shrink-0">{getCurrencySymbol(demoCurrency)}</span>
+                  <span>Split & Settle</span>
                 </button>
                 <button
                   onClick={() => setActiveDemoTab('vault')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition ${
                     activeDemoTab === 'vault'
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400 font-bold'
                       : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
-                  <FileText className="h-3.5 w-3.5" />
-                  Vault
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span>Vault</span>
                 </button>
                 <button
                   onClick={() => setActiveDemoTab('tasks')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition ${
                     activeDemoTab === 'tasks'
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400 font-bold'
                       : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Tasks ({completedTasksCount}/{demoTasks.length})
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>Tasks ({completedTasksCount}/{demoTasks.length})</span>
                 </button>
               </div>
             </div>
@@ -1047,16 +1048,19 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             whileHover={{ scale: 1.01 }}
-            className="relative rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-8 sm:p-12 text-center text-white shadow-2xl overflow-hidden"
+            className="relative rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-8 sm:p-14 text-center text-white shadow-2xl overflow-hidden min-h-[360px] sm:min-h-[420px] flex items-center justify-center"
           >
             {/* Ambient pattern */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_70%)] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.22),_transparent_70%)] pointer-events-none" />
+
+            {/* Dotted White Earth Globe in Background */}
+            <DottedGlobe className="opacity-40 sm:opacity-55 scale-90 sm:scale-105" size={620} />
 
             <div className="relative z-10 max-w-2xl mx-auto space-y-5">
-              <h2 className="font-display text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight">
+              <h2 className="font-display text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight drop-shadow-sm">
                 Ready to plan your best group trip yet?
               </h2>
-              <p className="text-indigo-100 text-xs sm:text-base">
+              <p className="text-indigo-100 text-xs sm:text-base font-medium drop-shadow-sm">
                 Join thousands of friends, families, and travel squads traveling stress-free with TripOS.
               </p>
               <div className="pt-1">

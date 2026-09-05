@@ -12,7 +12,9 @@ type RequestWithId = Request & { id?: string };
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  constructor(private readonly logger: PinoLogger) {}
+  constructor(private readonly logger: PinoLogger) {
+    this.logger.setContext(AllExceptionsFilter.name);
+  }
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -26,22 +28,35 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const payload = isHttpException ? exception.getResponse() : null;
     const message = this.resolveMessage(payload, exception, status);
+    const path = request.originalUrl || request.url;
 
-    this.logger.error(
-      {
-        err: exception,
-        requestId: request.id,
-        method: request.method,
-        path: request.originalUrl || request.url,
-        statusCode: status,
-      },
-      'Request failed',
-    );
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(
+        {
+          err: exception,
+          requestId: request.id,
+          method: request.method,
+          path,
+          statusCode: status,
+        },
+        `${request.method} ${path} failed (${status}): ${message}`,
+      );
+    } else {
+      this.logger.warn(
+        {
+          requestId: request.id,
+          method: request.method,
+          path,
+          statusCode: status,
+        },
+        `${request.method} ${path} (${status}): ${message}`,
+      );
+    }
 
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.originalUrl || request.url,
+      path,
       requestId: request.id,
       message,
     });
@@ -59,7 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (payload && typeof payload === 'object') {
       const message = (payload as Record<string, unknown>)['message'];
       if (Array.isArray(message)) {
-        return message;
+        return message.join(', ');
       }
       if (typeof message === 'string') {
         return message;

@@ -1,11 +1,17 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { SupabaseStorageService } from '@/common/services/supabase-storage.service';
 import { UploadFileDto, UpdateFileDto } from './dtos/vault.dto';
 import { randomUUID } from 'crypto';
 
+const VAULT_BUCKET = process.env.SUPABASE_VAULT_BUCKET || 'trip-vault';
+
 @Injectable()
 export class VaultService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: SupabaseStorageService,
+  ) {}
 
   async getOrCreateVault(tripId: string, userId: string) {
     await this.verifyTripMembership(tripId, userId);
@@ -31,23 +37,48 @@ export class VaultService {
     // Get or create vault
     const vault = await this.getOrCreateVault(tripId, userId);
 
-    // Generate storage key (in real implementation, upload to S3)
-    const storageKey = `vaults/${tripId}/files/${randomUUID()}`;
+    // Sanitize file name
+    const sanitizedName = dto.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storageKey = `vaults/${tripId}/${randomUUID()}-${sanitizedName}`;
 
-    // For now, we'll just store metadata
-    // TODO: Integrate with S3-compatible storage
-    
+    let bufferToUpload = fileBuffer;
+    if (!bufferToUpload && dto.fileData) {
+      try {
+        // Strip data url header if present (e.g. data:application/pdf;base64,...)
+        const base64Data = dto.fileData.includes(',')
+          ? dto.fileData.split(',')[1]
+          : dto.fileData;
+        bufferToUpload = Buffer.from(base64Data, 'base64');
+      } catch {
+        bufferToUpload = undefined;
+      }
+    }
+
+    const calculatedSize = dto.size || (bufferToUpload?.length || 0);
+
+    // Upload to Supabase Storage if buffer is available and storage is enabled
+    if (bufferToUpload) {
+      await this.storage.uploadFile(
+        VAULT_BUCKET,
+        storageKey,
+        bufferToUpload,
+        dto.mimeType || 'application/octet-stream',
+      );
+    }
+
     const file = await this.prisma.vaultFile.create({
       data: {
         vaultId: vault.id,
         name: dto.name,
         mimeType: dto.mimeType,
-        size: dto.size || (fileBuffer?.length || 0),
+        size: calculatedSize,
         storageKey,
       },
     });
 
-    return this.formatFile(file);
+    const downloadUrl = await this.storage.getSignedUrl(VAULT_BUCKET, storageKey);
+
+    return this.formatFile(file, downloadUrl);
   }
 
   async listFiles(tripId: string, userId: string) {
@@ -66,7 +97,12 @@ export class VaultService {
       return [];
     }
 
-    return vault.files.map((f: any) => this.formatFile(f));
+    return Promise.all(
+      vault.files.map(async (f: any) => {
+        const downloadUrl = await this.storage.getSignedUrl(VAULT_BUCKET, f.storageKey);
+        return this.formatFile(f, downloadUrl);
+      }),
+    );
   }
 
   async getFile(tripId: string, fileId: string, userId: string) {
@@ -88,7 +124,9 @@ export class VaultService {
       throw new NotFoundException('File not found');
     }
 
-    return this.formatFile(file);
+    const downloadUrl = await this.storage.getSignedUrl(VAULT_BUCKET, file.storageKey);
+
+    return this.formatFile(file, downloadUrl);
   }
 
   async deleteFile(tripId: string, fileId: string, userId: string) {
@@ -110,8 +148,12 @@ export class VaultService {
       throw new NotFoundException('File not found');
     }
 
-    // TODO: Delete from S3
-    
+    // Delete from Supabase Storage
+    if (file.storageKey) {
+      await this.storage.deleteFile(VAULT_BUCKET, file.storageKey);
+    }
+
+    // Delete from Prisma Database
     await this.prisma.vaultFile.delete({
       where: { id: fileId },
     });
@@ -145,7 +187,9 @@ export class VaultService {
       },
     });
 
-    return this.formatFile(updated);
+    const downloadUrl = await this.storage.getSignedUrl(VAULT_BUCKET, updated.storageKey);
+
+    return this.formatFile(updated, downloadUrl);
   }
 
   private async verifyTripMembership(tripId: string, userId: string) {
@@ -163,12 +207,14 @@ export class VaultService {
     }
   }
 
-  private formatFile(file: any) {
+  private formatFile(file: any, downloadUrl?: string | null) {
     return {
       id: file.id,
       name: file.name,
       mimeType: file.mimeType,
       size: file.size,
+      storageKey: file.storageKey,
+      downloadUrl: downloadUrl || null,
       createdAt: file.createdAt,
     };
   }

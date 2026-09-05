@@ -4,12 +4,12 @@
   "description": "TripOS database schema and migrations",
   "private": true,
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "db:seed": "ts-node prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:generate": "node scripts/run-prisma.js generate",
+    "db:migrate": "node scripts/run-prisma.js migrate deploy",
+    "db:migrate:dev": "node scripts/run-prisma.js migrate dev",
+    "db:push": "node scripts/run-prisma.js db push",
+    "db:seed": "node scripts/run-prisma.js db seed",
+    "db:studio": "node scripts/run-prisma.js studio"
   },
   "devDependencies": {
     "prisma": "5.6.0",
