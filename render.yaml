@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: pnpm install && pnpm db:generate && pnpm --filter @tripos/api build
+    buildCommand: npm install -g pnpm && pnpm install && pnpm db:generate && pnpm --filter @tripos/api build
     startCommand: pnpm --filter @tripos/api start:prod
     envVars:
       - key: NODE_ENV
