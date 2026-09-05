@@ -85,6 +85,7 @@ export const usersApi = {
 };
 
 export const expensesApi = {
+  getOverview: (tripId: string) => api.get(`/trips/${tripId}/expenses/overview`),
   list: (tripId: string) => api.get(`/trips/${tripId}/expenses`),
   getById: (tripId: string, expenseId: string) => api.get(`/trips/${tripId}/expenses/${expenseId}`),
   create: (tripId: string, data: any) => api.post(`/trips/${tripId}/expenses`, data),

@@ -587,6 +587,135 @@ export class ExpensesService {
   }
 
   /**
+   * Unified performance-optimized overview endpoint.
+   * Fetches trip, expenses, audit counts, balances, and calculated settlement suggestions in parallel.
+   */
+  async getExpensesOverview(tripId: string, userId: string) {
+    const [, trip, expenses, balances] = await Promise.all([
+      this.verifyTripMembership(tripId, userId),
+      this.prisma.trip.findUnique({
+        where: { id: tripId },
+        include: { members: { include: { user: true } } },
+      }),
+      this.prisma.expense.findMany({
+        where: { tripId },
+        include: {
+          payer: true,
+          splits: { include: { user: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.expenseBalance.findMany({
+        where: { tripId },
+      }),
+    ]);
+
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const userIds = Array.from(
+      new Set([
+        ...balances.map((b) => b.fromUserId),
+        ...balances.map((b) => b.toUserId),
+        ...trip.members.map((m) => m.userId),
+      ]),
+    );
+
+    const [users, logs] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true },
+      }),
+      (this.prisma as any).expenseAuditLog.findMany({
+        where: { expenseId: { in: expenses.map((e) => e.id) } },
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: 'asc' },
+      }).catch(() => []),
+    ]);
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const auditLogMap = new Map<string, number>();
+    const createdByMap = new Map<string, { id: string; name: string | null; email: string }>();
+
+    for (const log of logs || []) {
+      auditLogMap.set(log.expenseId, (auditLogMap.get(log.expenseId) || 0) + 1);
+      if (log.action === 'CREATED' && log.user && !createdByMap.has(log.expenseId)) {
+        createdByMap.set(log.expenseId, {
+          id: log.user.id,
+          name: log.user.name,
+          email: log.user.email,
+        });
+      }
+    }
+
+    const formattedExpenses = expenses.map((e: any) => ({
+      ...this.formatExpense(e),
+      addedBy: createdByMap.get(e.id) || {
+        id: e.payer?.id || e.payerId,
+        name: e.payer?.name || 'Member',
+        email: e.payer?.email || '',
+      },
+      editCount: auditLogMap.get(e.id) || 1,
+    }));
+
+    const formattedBalances = balances.map((b: any) => ({
+      fromUserId: b.fromUserId,
+      fromUser: userMap.get(b.fromUserId) || { id: b.fromUserId, name: 'User' },
+      toUserId: b.toUserId,
+      toUser: userMap.get(b.toUserId) || { id: b.toUserId, name: 'User' },
+      amount: b.balance,
+    }));
+
+    const netBalances = new Map<string, number>();
+    for (const balance of balances) {
+      const fromCurrent = netBalances.get(balance.fromUserId) || 0;
+      const toCurrent = netBalances.get(balance.toUserId) || 0;
+      netBalances.set(balance.fromUserId, fromCurrent - balance.balance);
+      netBalances.set(balance.toUserId, toCurrent + balance.balance);
+    }
+
+    const suggestions: any[] = [];
+    const debtors = Array.from(netBalances.entries())
+      .filter(([, amount]) => amount < 0)
+      .sort((a, b) => a[1] - b[1]);
+
+    const creditors = Array.from(netBalances.entries())
+      .filter(([, amount]) => amount > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    let debtorIdx = 0;
+    let creditorIdx = 0;
+
+    while (debtorIdx < debtors.length && creditorIdx < creditors.length) {
+      const [debtorId, debtAmount] = debtors[debtorIdx];
+      const [creditorId, creditAmount] = creditors[creditorIdx];
+      const amount = Math.min(Math.abs(debtAmount), creditAmount);
+
+      suggestions.push({
+        from: debtorId,
+        fromName: userMap.get(debtorId)?.name || userMap.get(debtorId)?.email || debtorId,
+        to: creditorId,
+        toName: userMap.get(creditorId)?.name || userMap.get(creditorId)?.email || creditorId,
+        amount,
+      });
+
+      debtors[debtorIdx][1] += amount;
+      creditors[creditorIdx][1] -= amount;
+
+      if (debtors[debtorIdx][1] === 0) debtorIdx++;
+      if (creditors[creditorIdx][1] === 0) creditorIdx++;
+    }
+
+    return {
+      trip,
+      expenses: formattedExpenses,
+      balances: formattedBalances,
+      settlements: suggestions,
+    };
+  }
+
+  /**
    * Internal helper to recalculate pairwise balances from raw expense entries.
    * Wipes and rebuilds the `expense_balances` table for the trip in O(E) time.
    */

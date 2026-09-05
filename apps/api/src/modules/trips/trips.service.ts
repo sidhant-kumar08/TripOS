@@ -345,19 +345,26 @@ export class TripsService {
       },
     });
 
-    const result = [];
-    for (const inv of invitations) {
-      const trip = await this.prisma.trip.findUnique({
-        where: { id: inv.tripId },
-        include: {
-          members: {
-            include: {
-              user: true,
-            },
+    const tripIds = Array.from(new Set(invitations.map((i) => i.tripId)));
+    if (tripIds.length === 0) {
+      return [];
+    }
+
+    const trips = await this.prisma.trip.findMany({
+      where: { id: { in: tripIds } },
+      include: {
+        members: {
+          include: {
+            user: true,
           },
         },
-      });
+      },
+    });
+    const tripMap = new Map(trips.map((t) => [t.id, t]));
 
+    const result = [];
+    for (const inv of invitations) {
+      const trip = tripMap.get(inv.tripId);
       if (trip) {
         const isMember = trip.members.some((m) => m.userId === userId);
         if (!isMember) {

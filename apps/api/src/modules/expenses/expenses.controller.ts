@@ -31,6 +31,30 @@ export class ExpensesController {
     return this.expensesService.createExpense(tripId, req.user.sub, dto);
   }
 
+  @Get('overview')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get unified expenses overview (trip, expenses, balances, settlements) in 1 call' })
+  async getExpensesOverview(@Param('tripId') tripId: string, @Req() req: any) {
+    return this.expensesService.getExpensesOverview(tripId, req.user.sub);
+  }
+
+  @Get('balances/all')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all balances in a trip' })
+  async getBalances(@Param('tripId') tripId: string, @Req() req: any) {
+    return this.expensesService.getBalances(tripId, req.user.sub);
+  }
+
+  @Get('settlement/suggestions')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get settlement suggestions' })
+  async getSettlementSuggestions(@Param('tripId') tripId: string, @Req() req: any) {
+    return this.expensesService.getSettlementSuggestions(tripId, req.user.sub);
+  }
+
   @Get()
   @UseGuards(JwtGuard)
   @ApiBearerAuth()
@@ -86,21 +110,5 @@ export class ExpensesController {
     @Req() req: any,
   ) {
     return this.expensesService.deleteExpense(tripId, expenseId, req.user.sub);
-  }
-
-  @Get('balances/all')
-  @UseGuards(JwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all balances in a trip' })
-  async getBalances(@Param('tripId') tripId: string, @Req() req: any) {
-    return this.expensesService.getBalances(tripId, req.user.sub);
-  }
-
-  @Get('settlement/suggestions')
-  @UseGuards(JwtGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get settlement suggestions' })
-  async getSettlementSuggestions(@Param('tripId') tripId: string, @Req() req: any) {
-    return this.expensesService.getSettlementSuggestions(tripId, req.user.sub);
   }
 }

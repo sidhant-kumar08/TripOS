@@ -148,21 +148,35 @@ export default function ExpensesPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const config = { headers: getAuthHeader() };
 
-      const [tripRes, expensesRes, settlementsRes, balancesRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/trips/${tripId}`, config).catch(() => ({ data: null })),
-        expensesApi.list(tripId).catch(() => ({ data: [] })),
-        expensesApi.getSettlements(tripId).catch(() => ({ data: [] })),
-        expensesApi.getBalances(tripId).catch(() => ({ data: [] })),
-      ]);
+      try {
+        // Fast path: Consolidated overview endpoint (1 network roundtrip)
+        const overviewRes = await expensesApi.getOverview(tripId);
+        const { trip, expenses: expList, settlements: setList, balances: balList } = overviewRes.data || {};
+        if (trip?.members) {
+          setTripMembers(trip.members);
+        }
+        setExpenses(expList || []);
+        setSettlements(setList || []);
+        setBalances(balList || []);
+      } catch (overviewErr) {
+        // Fallback to separate endpoints if overview is not supported
+        console.warn('Consolidated overview failed, falling back to separate calls:', overviewErr);
+        const config = { headers: getAuthHeader() };
+        const [tripRes, expensesRes, settlementsRes, balancesRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/trips/${tripId}`, config).catch(() => ({ data: null })),
+          expensesApi.list(tripId).catch(() => ({ data: [] })),
+          expensesApi.getSettlements(tripId).catch(() => ({ data: [] })),
+          expensesApi.getBalances(tripId).catch(() => ({ data: [] })),
+        ]);
 
-      if (tripRes.data?.members) {
-        setTripMembers(tripRes.data.members);
+        if (tripRes.data?.members) {
+          setTripMembers(tripRes.data.members);
+        }
+        setExpenses(expensesRes.data || []);
+        setSettlements(settlementsRes.data || []);
+        setBalances(balancesRes.data || []);
       }
-      setExpenses(expensesRes.data || []);
-      setSettlements(settlementsRes.data || []);
-      setBalances(balancesRes.data || []);
     } catch (error) {
       console.error('Failed to fetch expenses:', error);
     } finally {
