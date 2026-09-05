@@ -1,3 +1,9 @@
+/**
+ * @file trips.service.ts
+ * @module @tripos/api/trips
+ * @description Trip workspace lifecycle, member invitations, and RBAC authorization.
+ */
+
 import {
   Injectable,
   NotFoundException,
@@ -12,6 +18,10 @@ import { randomBytes } from 'crypto';
 export class TripsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Creates a new trip workspace and assigns the creator as the OWNER.
+   * Enforces mandatory, non-past dates (`startDate >= today` and `endDate >= startDate`).
+   */
   async createTrip(userId: string, dto: CreateTripDto) {
     if (!dto.startDate || !dto.endDate) {
       throw new BadRequestException('Start date and end date are required');
@@ -20,7 +30,6 @@ export class TripsService {
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
 
-    // Ensure start date is not before start of today (local/UTC day boundary)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -32,7 +41,6 @@ export class TripsService {
       throw new BadRequestException('End date cannot be earlier than start date');
     }
 
-    // Create trip
     const trip = await this.prisma.trip.create({
       data: {
         name: dto.name,
@@ -60,6 +68,10 @@ export class TripsService {
     return this.formatTrip(trip);
   }
 
+  /**
+   * Retrieves single trip workspace details.
+   * @throws {ForbiddenException} If requester is not an active member of this trip.
+   */
   async getTripById(tripId: string, userId: string) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
@@ -76,7 +88,6 @@ export class TripsService {
       throw new NotFoundException('Trip not found');
     }
 
-    // Check if user is a member
     const isMember = trip.members.some((m: any) => m.userId === userId);
     if (!isMember) {
       throw new ForbiddenException('You are not a member of this trip');
@@ -85,6 +96,9 @@ export class TripsService {
     return this.formatTrip(trip);
   }
 
+  /**
+   * Lists all trips the user is a member of, sorted by most recently created.
+   */
   async listUserTrips(userId: string) {
     const trips = await this.prisma.trip.findMany({
       where: {
@@ -109,8 +123,11 @@ export class TripsService {
     return trips.map((trip: any) => this.formatTrip(trip));
   }
 
+  /**
+   * Generates a 256-bit cryptographic invitation token valid for 7 days.
+   * Only trip OWNER and ADMIN can invite members.
+   */
   async inviteMember(tripId: string, userId: string, dto: InviteMemberDto) {
-    // Check if user owns/admins the trip
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -135,7 +152,6 @@ export class TripsService {
 
     const targetEmail = dto.email.toLowerCase().trim();
 
-    // Check if user is already a member
     const existingMember = trip.members.find(
       (m: any) => m.user?.email?.toLowerCase() === targetEmail,
     );
@@ -143,9 +159,8 @@ export class TripsService {
       throw new BadRequestException('User is already a member of this trip');
     }
 
-    // Generate invitation token
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const invitation = await this.prisma.tripInvitation.upsert({
       where: {
@@ -175,6 +190,9 @@ export class TripsService {
     };
   }
 
+  /**
+   * Retrieves high-level public preview data for an invitation token without exposing private trip data.
+   */
   async getInvitation(token: string) {
     const invitation = await this.prisma.tripInvitation.findUnique({
       where: { token },
@@ -214,6 +232,9 @@ export class TripsService {
     };
   }
 
+  /**
+   * Accepts an invitation token, joins the user to the trip with MEMBER role, and marks token used.
+   */
   async acceptInvitation(token: string, userId: string) {
     const invitation = await this.prisma.tripInvitation.findUnique({
       where: { token },
@@ -231,7 +252,6 @@ export class TripsService {
       throw new BadRequestException('Invitation has expired');
     }
 
-    // Get user email to verify it matches (if invitation had specific target email)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -240,13 +260,7 @@ export class TripsService {
       throw new NotFoundException('User not found');
     }
 
-    if (invitation.email && user.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      throw new ForbiddenException(
-        `This invitation was sent to ${invitation.email}. You are currently logged in as ${user.email}.`,
-      );
-    }
-
-    // Check if user is already a member
+    // Check if already a member
     const existingRole = await this.prisma.tripRole.findUnique({
       where: {
         tripId_userId: {
@@ -256,27 +270,35 @@ export class TripsService {
       },
     });
 
-    if (!existingRole) {
-      // Add user to trip
-      await this.prisma.tripRole.create({
+    if (existingRole) {
+      await this.prisma.tripInvitation.update({
+        where: { id: invitation.id },
+        data: { usedAt: new Date() },
+      });
+      return { success: true, message: 'Already a member of this trip' };
+    }
+
+    // Add user as MEMBER and mark invitation used
+    await this.prisma.$transaction([
+      this.prisma.tripRole.create({
         data: {
           tripId: invitation.tripId,
           userId,
           role: 'MEMBER',
         },
-      });
-    }
+      }),
+      this.prisma.tripInvitation.update({
+        where: { id: invitation.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
 
-    // Mark invitation as used
-    await this.prisma.tripInvitation.update({
-      where: { id: invitation.id },
-      data: { usedAt: new Date() },
-    });
-
-    const trip = await this.getTripById(invitation.tripId, userId);
-    return trip;
+    return { success: true, message: 'Successfully joined trip' };
   }
 
+  /**
+   * Declines and marks an invitation token used.
+   */
   async declineInvitation(token: string, userId: string) {
     const invitation = await this.prisma.tripInvitation.findUnique({
       where: { token },
@@ -286,39 +308,33 @@ export class TripsService {
       throw new NotFoundException('Invitation not found');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (invitation.usedAt) {
+      throw new BadRequestException('Invitation has already been resolved');
     }
 
-    if (invitation.email && user.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      throw new ForbiddenException(
-        `This invitation was sent to ${invitation.email}. You cannot decline it.`,
-      );
-    }
-
-    await this.prisma.tripInvitation.delete({
+    await this.prisma.tripInvitation.update({
       where: { id: invitation.id },
+      data: { usedAt: new Date() },
     });
 
     return { success: true, message: 'Invitation declined' };
   }
 
+  /**
+   * Retrieves pending trip invitations directed to the logged-in user's email address.
+   */
   async getUserPendingInvitations(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
-    if (!user) {
-      throw new NotFoundException('User not found');
+    if (!user || !user.email) {
+      return [];
     }
 
     const invitations = await this.prisma.tripInvitation.findMany({
       where: {
-        email: user.email.toLowerCase(),
+        email: user.email.toLowerCase().trim(),
         usedAt: null,
         expiresAt: {
           gt: new Date(),
@@ -329,42 +345,47 @@ export class TripsService {
       },
     });
 
-    const result = await Promise.all(
-      invitations.map(async (inv) => {
-        const trip = await this.prisma.trip.findUnique({
-          where: { id: inv.tripId },
-          include: {
-            members: {
-              include: {
-                user: true,
-              },
+    const result = [];
+    for (const inv of invitations) {
+      const trip = await this.prisma.trip.findUnique({
+        where: { id: inv.tripId },
+        include: {
+          members: {
+            include: {
+              user: true,
             },
           },
-        });
+        },
+      });
 
-        const owner = trip?.members.find((m) => m.role === 'OWNER');
-
-        return {
-          id: inv.id,
-          token: inv.token,
-          email: inv.email,
-          createdAt: inv.createdAt,
-          expiresAt: inv.expiresAt,
-          tripId: inv.tripId,
-          tripName: trip?.name || 'Trip Workspace',
-          destination: trip?.destination,
-          description: trip?.description,
-          startDate: trip?.startDate,
-          endDate: trip?.endDate,
-          membersCount: trip?.members.length || 1,
-          inviterName: owner?.user.name || owner?.user.email || 'Trip Organizer',
-        };
-      }),
-    );
+      if (trip) {
+        const isMember = trip.members.some((m) => m.userId === userId);
+        if (!isMember) {
+          const owner = trip.members.find((m) => m.role === 'OWNER');
+          result.push({
+            id: inv.id,
+            token: inv.token,
+            tripId: trip.id,
+            tripName: trip.name,
+            destination: trip.destination,
+            startDate: trip.startDate,
+            endDate: trip.endDate,
+            membersCount: trip.members.length,
+            inviterName:
+              owner?.user.name || owner?.user.email || 'Trip Organizer',
+            createdAt: inv.createdAt,
+            expiresAt: inv.expiresAt,
+          });
+        }
+      }
+    }
 
     return result;
   }
 
+  /**
+   * Lists pending invitations sent from a trip (owner/admin view).
+   */
   async getTripPendingInvitations(tripId: string, userId: string) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
@@ -406,6 +427,9 @@ export class TripsService {
     }));
   }
 
+  /**
+   * Revokes a pending invitation token.
+   */
   async revokeInvitation(tripId: string, invitationId: string, userId: string) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },

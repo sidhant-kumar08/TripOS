@@ -1,8 +1,15 @@
+/**
+ * @file run-prisma.js
+ * @description Dynamic database switcher script for Prisma CLI commands.
+ * Reads DB_TARGET ("local" | "supabase") from .env files and seamlessly injects
+ * either local Docker PostgreSQL or Supabase Cloud connection strings.
+ */
+
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Simple .env parser to avoid external dependencies
+// Zero-dependency .env parser for robust multi-file environment loading
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return {};
   const content = fs.readFileSync(filePath, 'utf8');

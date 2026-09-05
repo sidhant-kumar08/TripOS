@@ -1,3 +1,9 @@
+/**
+ * @file api.ts
+ * @description Central Axios HTTP client for TripOS web application.
+ * Automatically injects JWT Bearer tokens from localStorage and handles 401 redirects.
+ */
+
 import axios, { AxiosInstance } from 'axios';
 import { API_BASE_URL } from './runtime-config';
 
