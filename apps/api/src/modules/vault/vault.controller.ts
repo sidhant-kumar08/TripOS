@@ -8,11 +8,23 @@ import {
   Body,
   UseGuards,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { VaultService } from './vault.service';
 import { UploadFileDto, UpdateFileDto } from './dtos/vault.dto';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
 
 @ApiTags('vault')
 @Controller('trips/:tripId/vault')
@@ -21,16 +33,28 @@ export class VaultController {
 
   @Post('files')
   @UseGuards(JwtGuard)
+  @UseInterceptors(FileInterceptor('file'))
   @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({ summary: 'Upload a file to trip vault' })
   async uploadFile(
     @Param('tripId') tripId: string,
     @Req() req: any,
-    @Body() dto: UploadFileDto,
+    @Body() dto: Partial<UploadFileDto>,
+    @UploadedFile() file?: MulterFile,
   ) {
-    // Note: File upload via multipart/form-data requires middleware configuration
-    // For MVP, we'll accept file metadata and store file reference
-    return this.vaultService.uploadFile(tripId, req.user.sub, dto);
+    const name = dto?.name || file?.originalname || 'document';
+    const mimeType = dto?.mimeType || file?.mimetype || 'application/octet-stream';
+    const parsedSize = dto?.size !== undefined ? Number(dto.size) : file?.size;
+
+    const uploadDto: UploadFileDto = {
+      name,
+      mimeType,
+      size: isNaN(parsedSize as number) ? file?.size || 0 : parsedSize,
+      fileData: dto?.fileData,
+    };
+
+    return this.vaultService.uploadFile(tripId, req.user.sub, uploadDto, file?.buffer);
   }
 
   @Get('files')

@@ -1,8 +1,29 @@
-import { Controller, Get, Put, Post, Body, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Body,
+  UseGuards,
+  Req,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateProfileDto, ChangePasswordDto } from './dtos/users.dto';
 import { JwtGuard } from '../auth/guards/jwt.guard';
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
 
 @ApiTags('users')
 @Controller('users')
@@ -25,6 +46,27 @@ export class UsersController {
     return this.usersService.updateProfile(req.user.sub, dto);
   }
 
+  @Post('avatar')
+  @UseGuards(JwtGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload avatar / profile picture file directly to Supabase storage' })
+  async uploadAvatar(
+    @Req() req: any,
+    @UploadedFile() file?: MulterFile,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.usersService.uploadAvatarFile(
+      req.user.sub,
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+    );
+  }
+
   @Post('change-password')
   @UseGuards(JwtGuard)
   @ApiBearerAuth()
@@ -33,4 +75,3 @@ export class UsersController {
     return this.usersService.changePassword(req.user.sub, dto);
   }
 }
-

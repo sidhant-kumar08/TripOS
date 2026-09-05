@@ -1,19 +1,20 @@
-import { IsString, IsOptional, IsNumber } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UploadFileDto {
-  @ApiProperty({ description: 'File name with extension', example: 'flight-tickets.pdf' })
+  @ApiPropertyOptional({ description: 'File name with extension', example: 'flight-tickets.pdf' })
   @IsString()
-  name!: string;
+  @IsOptional()
+  name?: string;
 
-  @ApiProperty({ description: 'MIME type of the file', example: 'application/pdf' })
+  @ApiPropertyOptional({ description: 'MIME type of the file', example: 'application/pdf' })
   @IsString()
-  mimeType!: string;
+  @IsOptional()
+  mimeType?: string;
 
   @ApiPropertyOptional({ description: 'File size in bytes', example: 102400 })
-  @IsNumber()
   @IsOptional()
-  size?: number;
+  size?: number | string;
 
   @ApiPropertyOptional({ description: 'Base64 encoded file data (optional for direct upload)' })
   @IsString()

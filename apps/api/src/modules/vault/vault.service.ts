@@ -37,8 +37,11 @@ export class VaultService {
     // Get or create vault
     const vault = await this.getOrCreateVault(tripId, userId);
 
+    const fileName = dto.name || 'document';
+    const mimeType = dto.mimeType || 'application/octet-stream';
+
     // Sanitize file name
-    const sanitizedName = dto.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storageKey = `vaults/${tripId}/${randomUUID()}-${sanitizedName}`;
 
     let bufferToUpload = fileBuffer;
@@ -54,7 +57,12 @@ export class VaultService {
       }
     }
 
-    const calculatedSize = dto.size || (bufferToUpload?.length || 0);
+    let calculatedSize = bufferToUpload?.length || 0;
+    if (typeof dto.size === 'number') {
+      calculatedSize = dto.size;
+    } else if (typeof dto.size === 'string' && !isNaN(Number(dto.size))) {
+      calculatedSize = Number(dto.size);
+    }
 
     // Upload to Supabase Storage if buffer is available and storage is enabled
     if (bufferToUpload) {
@@ -62,15 +70,15 @@ export class VaultService {
         VAULT_BUCKET,
         storageKey,
         bufferToUpload,
-        dto.mimeType || 'application/octet-stream',
+        mimeType,
       );
     }
 
     const file = await this.prisma.vaultFile.create({
       data: {
         vaultId: vault.id,
-        name: dto.name,
-        mimeType: dto.mimeType,
+        name: fileName,
+        mimeType,
         size: calculatedSize,
         storageKey,
       },
@@ -183,7 +191,7 @@ export class VaultService {
     const updated = await this.prisma.vaultFile.update({
       where: { id: fileId },
       data: {
-        name: dto.name,
+        ...(dto.name ? { name: dto.name } : {}),
       },
     });
 

@@ -1,11 +1,19 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, Logger } from '@nestjs/common';
 import { hash, verify } from 'argon2';
 import { PrismaService } from '@/common/services/prisma.service';
+import { SupabaseStorageService } from '@/common/services/supabase-storage.service';
 import { UpdateProfileDto, ChangePasswordDto } from './dtos/users.dto';
+
+const AVATARS_BUCKET = process.env.SUPABASE_AVATARS_BUCKET || 'avatars';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: SupabaseStorageService,
+  ) {}
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -39,11 +47,35 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    let finalAvatar = dto.avatar !== undefined ? dto.avatar.trim() || null : user.avatar;
+
+    // If a base64 data URL was provided, upload to Supabase avatars bucket
+    if (finalAvatar && finalAvatar.startsWith('data:image/')) {
+      try {
+        const matches = finalAvatar.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const contentType = matches[1];
+          const base64Data = matches[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = contentType.split('/')[1] || 'png';
+          const storagePath = `avatars/${userId}-${Date.now()}.${ext}`;
+
+          await this.storage.uploadFile(AVATARS_BUCKET, storagePath, buffer, contentType);
+          const publicUrl = this.storage.getPublicUrl(AVATARS_BUCKET, storagePath);
+          if (publicUrl) {
+            finalAvatar = publicUrl;
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed uploading base64 avatar to Supabase: ${err.message}`);
+      }
+    }
+
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...(dto.name !== undefined && { name: dto.name.trim() }),
-        ...(dto.avatar !== undefined && { avatar: dto.avatar.trim() || null }),
+        ...(finalAvatar !== undefined && { avatar: finalAvatar }),
       },
       select: {
         id: true,
@@ -55,6 +87,35 @@ export class UsersService {
         appleId: true,
         createdAt: true,
         updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async uploadAvatarFile(userId: string, fileBuffer: Buffer, mimeType: string, originalName?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const ext = mimeType.split('/')[1] || originalName?.split('.').pop() || 'png';
+    const storagePath = `avatars/${userId}-${Date.now()}.${ext}`;
+
+    await this.storage.uploadFile(AVATARS_BUCKET, storagePath, fileBuffer, mimeType);
+    const publicUrl = this.storage.getPublicUrl(AVATARS_BUCKET, storagePath) || storagePath;
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatar: publicUrl },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
       },
     });
 
