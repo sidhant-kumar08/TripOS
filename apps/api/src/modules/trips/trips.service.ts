@@ -13,6 +13,10 @@ export class TripsService {
   constructor(private prisma: PrismaService) {}
 
   async createTrip(userId: string, dto: CreateTripDto) {
+    if (dto.startDate && dto.endDate && new Date(dto.startDate) > new Date(dto.endDate)) {
+      throw new BadRequestException('End date cannot be earlier than start date');
+    }
+
     // Create trip
     const trip = await this.prisma.trip.create({
       data: {

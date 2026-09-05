@@ -137,6 +137,11 @@ function DashboardContent() {
     e.preventDefault();
     if (!tripName.trim()) return;
 
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      setErrorMessage('End date cannot be earlier than start date');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMessage('');
