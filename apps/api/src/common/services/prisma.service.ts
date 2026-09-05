@@ -19,15 +19,12 @@ export class PrismaService
 
     const isLocal = target === 'local';
 
-    const dbUrl = isLocal
-      ? configService.get<string>('LOCAL_DATABASE_URL') ||
-        process.env.LOCAL_DATABASE_URL ||
-        configService.get<string>('DATABASE_URL') ||
-        process.env.DATABASE_URL
-      : configService.get<string>('SUPABASE_DATABASE_URL') ||
-        process.env.SUPABASE_DATABASE_URL ||
-        configService.get<string>('DATABASE_URL') ||
-        process.env.DATABASE_URL;
+    const dbUrl =
+      configService.get<string>('DATABASE_URL') ||
+      process.env.DATABASE_URL ||
+      (isLocal
+        ? configService.get<string>('LOCAL_DATABASE_URL') || process.env.LOCAL_DATABASE_URL
+        : configService.get<string>('SUPABASE_DATABASE_URL') || process.env.SUPABASE_DATABASE_URL);
 
     super({
       datasources: dbUrl
@@ -39,12 +36,16 @@ export class PrismaService
         : undefined,
     });
 
-    this.activeTarget = isLocal ? 'LOCAL POSTGRES' : 'SUPABASE CLOUD';
+    this.activeTarget = isLocal ? 'POSTGRES' : 'CLOUD DATABASE';
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.log(`Connected to database [${this.activeTarget}] successfully`, 'PrismaService');
+    try {
+      await this.$connect();
+      this.logger.log(`Connected to database [${this.activeTarget}] successfully`, 'PrismaService');
+    } catch (err: any) {
+      this.logger.error(`Database connection warning: ${err?.message || err}`, 'PrismaService');
+    }
   }
 
   async onModuleDestroy() {
