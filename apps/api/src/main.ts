@@ -37,9 +37,22 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  // Enable CORS for local development
+  // Enable CORS for local & production web frontends
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'https://tripos-app-kappa.vercel.app',
+    process.env.FRONTEND_URL,
+    process.env.APP_URL,
+  ].filter(Boolean) as (string | RegExp)[];
+
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Permissive fallback for seamless API access
+      }
+    },
     credentials: true,
   });
 

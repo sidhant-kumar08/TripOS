@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: tripos-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install && pnpm db:generate && pnpm --filter @tripos/api build
+    startCommand: pnpm --filter @tripos/api start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tripos-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://tripos-app-kappa.vercel.app
+      - key: APP_URL
+        value: https://tripos-app-kappa.vercel.app
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+
+databases:
+  - name: tripos-db
+    plan: free
+    region: oregon
+    databaseName: tripos
+    user: tripos_user
