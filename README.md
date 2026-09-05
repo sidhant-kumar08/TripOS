@@ -134,6 +134,16 @@ The services will be accessible at:
 
 ---
 
+## 📚 Project Documentation
+
+- 🏛️ **[System Architecture & Technical Design](Docs/ARCHITECTURE.md)**: Deep dive into the modular monolith, RBAC guards, financial ledger algorithm, and deployment infrastructure.
+- 🎯 **[Product Specification & Features](Docs/PRODUCT_SPEC.md)**: Product requirements, user journeys, core modules, and post-MVP roadmap.
+- 🛠️ **[Major Problems & Solutions](Docs/PROBLEMS_AND_SOLUTIONS.md)**: Incident logs and architectural resolutions across TypeScript, Docker, CI/CD, and multi-cloud hosting.
+- 🗄️ **[Database ERD (dbdiagram.io)](Docs/schema.dbml)**: Complete DBML schema ready for copy-pasting into [dbdiagram.io](https://dbdiagram.io).
+
+---
+
 ## 📄 License
 
 Proprietary © 2026 TripOS Team. All rights reserved.
+
