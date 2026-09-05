@@ -11,10 +11,16 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DB_TARGET
+        value: supabase
       - key: DATABASE_URL
-        fromDatabase:
-          name: tripos-db
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_DATABASE_URL
+        sync: false
+      - key: SUPABASE_DIRECT_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
@@ -29,10 +35,3 @@ services:
         sync: false
       - key: FACEBOOK_APP_SECRET
         sync: false
-
-databases:
-  - name: tripos-db
-    plan: free
-    region: oregon
-    databaseName: tripos
-    user: tripos_user
