@@ -13,6 +13,9 @@ import {
   ArrowRight,
   Sparkles,
   Plane,
+  Mail,
+  Check,
+  X,
 } from 'lucide-react';
 import { ProtectedRoute } from '@/lib/protected-route';
 import { tripsApi } from '@/lib/api';
@@ -37,6 +40,22 @@ interface Trip {
   members?: any[];
 }
 
+interface PendingInvite {
+  id: string;
+  token: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  tripId: string;
+  tripName: string;
+  destination?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  membersCount: number;
+  inviterName: string;
+}
+
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
@@ -49,6 +68,9 @@ function DashboardContent() {
   const router = useRouter();
   const { user } = useAuth();
   const [trips, setTrips] = React.useState<Trip[]>([]);
+  const [pendingInvitations, setPendingInvitations] = React.useState<PendingInvite[]>([]);
+  const [actingInviteToken, setActingInviteToken] = React.useState<string | null>(null);
+  const [inviteNotification, setInviteNotification] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [filterTab, setFilterTab] = React.useState<'all' | 'upcoming' | 'past'>('all');
@@ -64,18 +86,50 @@ function DashboardContent() {
   const [errorMessage, setErrorMessage] = React.useState('');
 
   React.useEffect(() => {
-    loadTrips();
+    loadData();
   }, []);
 
-  const loadTrips = async () => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
-      const response = await tripsApi.list();
-      setTrips(response.data);
+      const [tripsRes, invitesRes] = await Promise.all([
+        tripsApi.list().catch(() => ({ data: [] })),
+        tripsApi.getMyPendingInvitations().catch(() => ({ data: [] })),
+      ]);
+      setTrips(tripsRes.data || []);
+      setPendingInvitations(invitesRes.data || []);
     } catch (error) {
-      console.error('Failed to load trips:', error);
+      console.error('Failed to load dashboard data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAcceptInvite = async (token: string, tripId: string) => {
+    try {
+      setActingInviteToken(token);
+      await tripsApi.acceptInvitation(token);
+      setInviteNotification('Invitation accepted! Opening trip workspace...');
+      setTimeout(() => {
+        router.push(`/trips/${tripId}`);
+      }, 800);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to accept invitation');
+      setActingInviteToken(null);
+    }
+  };
+
+  const handleDeclineInvite = async (token: string) => {
+    try {
+      setActingInviteToken(token);
+      await tripsApi.declineInvitation(token);
+      setPendingInvitations(prev => prev.filter(inv => inv.token !== token));
+      setInviteNotification('Invitation declined.');
+      setTimeout(() => setInviteNotification(null), 3000);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to decline invitation');
+    } finally {
+      setActingInviteToken(null);
     }
   };
 
@@ -144,6 +198,93 @@ function DashboardContent() {
         </Button>
       }
     >
+      {/* Pending Invitations Banner if any */}
+      {inviteNotification && (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 animate-in fade-in">
+          {inviteNotification}
+        </div>
+      )}
+
+      {pendingInvitations.length > 0 && (
+        <div className="mb-8 rounded-3xl border border-indigo-200/80 bg-gradient-to-r from-blue-50/80 via-indigo-50/80 to-violet-50/80 p-6 shadow-sm dark:border-indigo-900/60 dark:bg-gradient-to-r dark:from-indigo-950/40 dark:via-blue-950/30 dark:to-slate-900/50">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+              <Mail className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Pending Trip Invitations ({pendingInvitations.length})
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                You have been invited to collaborate on these trip workspaces.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {pendingInvitations.map((inv) => (
+              <div
+                key={inv.id}
+                className="trip-glass-card rounded-2xl p-5 flex flex-col justify-between gap-4 border-indigo-200/60 dark:border-indigo-800/60 shadow-md"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                      {inv.tripName}
+                    </h4>
+                    <Badge variant="accent">
+                      <Users className="h-3 w-3 mr-1" />
+                      {inv.membersCount} {inv.membersCount === 1 ? 'member' : 'members'}
+                    </Badge>
+                  </div>
+
+                  {inv.destination && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {inv.destination}
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                    Invited by <strong className="text-slate-900 dark:text-white">{inv.inviterName}</strong>
+                  </p>
+
+                  {inv.startDate && (
+                    <p className="mt-1 text-[11px] text-slate-500 flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {formatDate(inv.startDate)} {inv.endDate ? `→ ${formatDate(inv.endDate)}` : ''}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <Button
+                    onClick={() => handleAcceptInvite(inv.token, inv.tripId)}
+                    variant="default"
+                    size="sm"
+                    className="flex-1"
+                    isLoading={actingInviteToken === inv.token}
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Accept & Join
+                  </Button>
+                  <Button
+                    onClick={() => handleDeclineInvite(inv.token)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    disabled={actingInviteToken === inv.token}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Top Stat Metrics */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

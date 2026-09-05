@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SocialAuthButtons } from '@/components/auth/social-auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -120,15 +121,25 @@ export default function LoginPage() {
               required
             />
 
-            <Input
-              type="password"
-              label="Password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              icon={<Lock className="h-4 w-4 shrink-0" />}
-              required
-            />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Password</span>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                icon={<Lock className="h-4 w-4 shrink-0" />}
+                required
+              />
+            </div>
 
             <Button
               type="submit"
@@ -141,6 +152,10 @@ export default function LoginPage() {
               <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           </form>
+
+          <div className="mt-6">
+            <SocialAuthButtons />
+          </div>
 
           <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
             Don&apos;t have an account?{' '}

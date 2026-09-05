@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SocialAuthButtons } from '@/components/auth/social-auth';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -174,6 +175,10 @@ export default function RegisterPage() {
               <ArrowRight className="h-4 w-4 ml-1" />
             </Button>
           </form>
+
+          <div className="mt-6">
+            <SocialAuthButtons />
+          </div>
 
           <p className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
             Already have an account?{' '}

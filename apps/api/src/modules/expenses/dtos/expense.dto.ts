@@ -16,6 +16,14 @@ export class CreateExpenseDto {
   @IsOptional()
   currency?: string;
 
+  @IsString()
+  @IsOptional()
+  category?: string; // EXPENSE, LEND_BORROW, SETTLEMENT
+
+  @IsString()
+  @IsOptional()
+  payerId?: string;
+
   @IsArray()
   splits!: ExpenseSplitInput[];
 }
@@ -29,7 +37,23 @@ export class UpdateExpenseDto {
   @IsOptional()
   amount?: number;
 
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  payerId?: string;
+
   @IsArray()
   @IsOptional()
   splits?: ExpenseSplitInput[];
+
+  @IsString()
+  @IsOptional()
+  changeReason?: string;
 }

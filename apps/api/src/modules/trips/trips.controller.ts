@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -33,6 +34,14 @@ export class TripsController {
     return this.tripsService.listUserTrips(req.user.sub);
   }
 
+  @Get('invitations/my-pending')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all pending trip invitations for the logged-in user' })
+  async getUserPendingInvitations(@Req() req: any) {
+    return this.tripsService.getUserPendingInvitations(req.user.sub);
+  }
+
   @Get(':tripId')
   @UseGuards(JwtGuard)
   @ApiBearerAuth()
@@ -53,6 +62,29 @@ export class TripsController {
     return this.tripsService.inviteMember(tripId, req.user.sub, dto);
   }
 
+  @Get(':tripId/invitations')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all pending invitations sent for a trip (owner/admin only)' })
+  async getTripPendingInvitations(
+    @Req() req: any,
+    @Param('tripId') tripId: string,
+  ) {
+    return this.tripsService.getTripPendingInvitations(tripId, req.user.sub);
+  }
+
+  @Delete(':tripId/invitations/:invitationId')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke/cancel a pending trip invitation' })
+  async revokeInvitation(
+    @Req() req: any,
+    @Param('tripId') tripId: string,
+    @Param('invitationId') invitationId: string,
+  ) {
+    return this.tripsService.revokeInvitation(tripId, invitationId, req.user.sub);
+  }
+
   @Get('invitations/:token')
   @ApiOperation({ summary: 'Get invitation details by token' })
   async getInvitation(@Param('token') token: string) {
@@ -65,5 +97,13 @@ export class TripsController {
   @ApiOperation({ summary: 'Accept a trip invitation' })
   async acceptInvitation(@Req() req: any, @Body('token') token: string) {
     return this.tripsService.acceptInvitation(token, req.user.sub);
+  }
+
+  @Post('invitations/decline')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Decline a trip invitation' })
+  async declineInvitation(@Req() req: any, @Body('token') token: string) {
+    return this.tripsService.declineInvitation(token, req.user.sub);
   }
 }

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Put,
   Get,
   Delete,
   Param,
@@ -10,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ExpensesService } from './expenses.service';
-import { CreateExpenseDto } from './dtos/expense.dto';
+import { CreateExpenseDto, UpdateExpenseDto } from './dtos/expense.dto';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 
 @ApiTags('expenses')
@@ -48,6 +49,31 @@ export class ExpensesController {
     @Req() req: any,
   ) {
     return this.expensesService.getExpense(tripId, expenseId, req.user.sub);
+  }
+
+  @Put(':expenseId')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an expense with audit log' })
+  async updateExpense(
+    @Param('tripId') tripId: string,
+    @Param('expenseId') expenseId: string,
+    @Req() req: any,
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.expensesService.updateExpense(tripId, expenseId, req.user.sub, dto);
+  }
+
+  @Get(':expenseId/history')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get edit audit history for an expense' })
+  async getExpenseHistory(
+    @Param('tripId') tripId: string,
+    @Param('expenseId') expenseId: string,
+    @Req() req: any,
+  ) {
+    return this.expensesService.getExpenseAuditLogs(tripId, expenseId, req.user.sub);
   }
 
   @Delete(':expenseId')

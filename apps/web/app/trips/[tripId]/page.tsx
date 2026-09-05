@@ -12,6 +12,9 @@ import {
   Copy,
   Check,
   Mail,
+  Trash2,
+  Clock,
+  Send,
 } from 'lucide-react';
 import { ProtectedRoute } from '@/lib/protected-route';
 import { tripsApi } from '@/lib/api';
@@ -31,6 +34,14 @@ interface TripMember {
     name: string;
     email: string;
   };
+}
+
+interface PendingSentInvite {
+  id: string;
+  email: string;
+  token: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 interface Trip {
@@ -57,6 +68,9 @@ function TripDetailContent() {
   const tripId = params.tripId as string;
 
   const [trip, setTrip] = React.useState<Trip | null>(null);
+  const [sentInvitations, setSentInvitations] = React.useState<PendingSentInvite[]>([]);
+  const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isInviteModalOpen, setIsInviteModalOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState('');
@@ -72,8 +86,12 @@ function TripDetailContent() {
   const loadTrip = async () => {
     try {
       setIsLoading(true);
-      const response = await tripsApi.getById(tripId);
-      setTrip(response.data);
+      const [tripRes, sentRes] = await Promise.all([
+        tripsApi.getById(tripId),
+        tripsApi.getTripPendingInvitations(tripId).catch(() => ({ data: [] })),
+      ]);
+      setTrip(tripRes.data);
+      setSentInvitations(sentRes.data || []);
     } catch (error) {
       console.error('Failed to load trip:', error);
       router.push('/dashboard');
@@ -104,6 +122,27 @@ function TripDetailContent() {
       });
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId: string) => {
+    try {
+      setRevokingId(invitationId);
+      await tripsApi.revokeInvitation(tripId, invitationId);
+      setSentInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Failed to revoke invitation');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const copySpecificToken = (token: string) => {
+    if (typeof window !== 'undefined') {
+      const inviteUrl = `${window.location.origin}/invite/${token}`;
+      navigator.clipboard.writeText(inviteUrl);
+      setCopiedToken(token);
+      setTimeout(() => setCopiedToken(null), 2000);
     }
   };
 
@@ -278,45 +317,112 @@ function TripDetailContent() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Group Members</CardTitle>
+              <CardTitle>Group Members & Invitations</CardTitle>
               <CardDescription>Collaborators with access to this trip workspace</CardDescription>
             </div>
-            <Button onClick={() => setIsInviteModalOpen(true)} size="sm">
+            <Button onClick={openInviteModal} size="sm">
               <UserPlus className="h-4 w-4 mr-1" />
-              Invite
+              Invite Member
             </Button>
           </div>
         </CardHeader>
 
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {trip.members?.map((member) => (
-              <div
-                key={member.userId}
-                className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 font-bold text-white text-xs">
-                    {getInitials(member.user.name || member.user.email)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white leading-tight">
-                      {member.user.name}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {member.user.email}
-                    </p>
-                  </div>
-                </div>
-
-                <Badge
-                  variant={member.role === 'OWNER' ? 'accent' : 'secondary'}
+        <CardContent className="space-y-6">
+          {/* Active Members */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+              Active Members ({trip.members?.length || 0})
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {trip.members?.map((member) => (
+                <div
+                  key={member.userId}
+                  className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/50"
                 >
-                  {member.role}
-                </Badge>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 font-bold text-white text-xs">
+                      {getInitials(member.user.name || member.user.email)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white leading-tight">
+                        {member.user.name}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {member.user.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Badge
+                    variant={member.role === 'OWNER' ? 'accent' : 'secondary'}
+                  >
+                    {member.role}
+                  </Badge>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Pending Sent Invitations */}
+          {sentInvitations.length > 0 && (
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                Pending Invitations ({sentInvitations.length})
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {sentInvitations.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex flex-col justify-between gap-3 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                          <Mail className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
+                            {inv.email}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Sent {formatDate(inv.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="warning">Pending</Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-amber-100 dark:border-amber-900/30">
+                      <Button
+                        onClick={() => copySpecificToken(inv.token)}
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1 text-[11px] h-7"
+                      >
+                        {copiedToken === inv.token ? (
+                          <Check className="h-3 w-3 text-emerald-500 mr-1" />
+                        ) : (
+                          <Copy className="h-3 w-3 mr-1" />
+                        )}
+                        {copiedToken === inv.token ? 'Link Copied' : 'Copy Link'}
+                      </Button>
+                      <Button
+                        onClick={() => handleRevokeInvitation(inv.id)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-[11px] h-7 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                        isLoading={revokingId === inv.id}
+                        title="Revoke Invitation"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -329,10 +435,10 @@ function TripDetailContent() {
           setGeneratedInviteUrl(null);
         }}
         title="Invite Friend to Trip"
-        description="They will receive an invitation token to join this shared workspace."
-        maxWidth="md"
+        description="Send an invitation link or email for this workspace."
+        maxWidth="lg"
       >
-        <div className="space-y-4 mt-2">
+        <div className="space-y-5 mt-2">
           {inviteStatus && (
             <div
               className={`rounded-xl border p-3 text-xs ${
@@ -345,7 +451,7 @@ function TripDetailContent() {
             </div>
           )}
 
-          {generatedInviteUrl ? (
+          {generatedInviteUrl && (
             <div className="space-y-3 p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60">
               <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
                 Share this direct invite link with your friend:
@@ -366,7 +472,7 @@ function TripDetailContent() {
                 They can open this link to preview and accept the trip invite.
               </p>
             </div>
-          ) : null}
+          )}
 
           <form onSubmit={handleInvite} className="space-y-4">
             <Input
@@ -396,10 +502,50 @@ function TripDetailContent() {
                 variant="default"
                 isLoading={isInviting}
               >
-                Generate Invite Link
+                <Send className="h-4 w-4 mr-1.5" />
+                Generate & Send Invite
               </Button>
             </div>
           </form>
+
+          {/* Modal Pending Sent List */}
+          {sentInvitations.length > 0 && (
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+              <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Active Pending Invitations ({sentInvitations.length})
+              </h5>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {sentInvitations.map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/60 text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white">{inv.email}</span>
+                      <span className="text-[10px] text-slate-500 ml-2">Sent {formatDate(inv.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => copySpecificToken(inv.token)}
+                        className="px-2 py-1 rounded-lg bg-white border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition"
+                      >
+                        {copiedToken === inv.token ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeInvitation(inv.id)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
+                        title="Revoke"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </PageShell>

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
-import { CreateExpenseDto } from './dtos/expense.dto';
+import { CreateExpenseDto, UpdateExpenseDto } from './dtos/expense.dto';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -8,8 +8,10 @@ export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
   async createExpense(tripId: string, userId: string, dto: CreateExpenseDto) {
-    // Verify user is a member
     await this.verifyTripMembership(tripId, userId);
+
+    const payerId = dto.payerId || userId;
+    await this.verifyTripMembership(tripId, payerId);
 
     // Validate splits sum equals amount
     const splitsTotal = dto.splits.reduce((sum, s) => sum + s.amount, 0);
@@ -19,21 +21,20 @@ export class ExpensesService {
       );
     }
 
-    // Verify all split participants are trip members
     for (const split of dto.splits) {
       await this.verifyTripMembership(tripId, split.userId);
     }
 
     const idempotencyKey = randomUUID();
 
-    // Create expense with splits in a transaction
     const expense = await this.prisma.expense.create({
       data: {
         tripId,
-        payerId: userId,
+        payerId,
         description: dto.description,
         amount: Math.round(dto.amount),
-        currency: dto.currency || 'USD',
+        currency: dto.currency || 'INR',
+        category: dto.category || 'EXPENSE',
         idempotencyKey,
         splits: {
           create: dto.splits.map((split) => ({
@@ -41,7 +42,7 @@ export class ExpensesService {
             amount: Math.round(split.amount),
           })),
         },
-      },
+      } as any,
       include: {
         payer: true,
         splits: {
@@ -52,10 +53,199 @@ export class ExpensesService {
       },
     });
 
+    // Create initial audit log
+    try {
+      const formattedAmount = (dto.amount / 100).toFixed(2);
+      await (this.prisma as any).expenseAuditLog.create({
+        data: {
+          expenseId: expense.id,
+          userId,
+          action: 'CREATED',
+          details: `Created by ${expense.payer?.name || expense.payer?.email || 'User'} (${dto.description} - ${dto.currency || 'INR'} ${formattedAmount})`,
+          changes: JSON.stringify({
+            amount: (dto.amount / 100).toFixed(2),
+            description: dto.description,
+            payerId,
+            category: dto.category || 'EXPENSE',
+            splitsCount: dto.splits.length,
+          }),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to write audit log for expense creation:', e);
+    }
+
     // Recalculate balances
     await this.recalculateBalances(tripId);
 
     return this.formatExpense(expense);
+  }
+
+  async updateExpense(tripId: string, expenseId: string, userId: string, dto: UpdateExpenseDto) {
+    await this.verifyTripMembership(tripId, userId);
+
+    const existingExpense = await this.prisma.expense.findUnique({
+      where: { id: expenseId },
+      include: {
+        payer: true,
+        splits: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!existingExpense || existingExpense.tripId !== tripId) {
+      throw new NotFoundException('Expense not found');
+    }
+
+    const newAmount = dto.amount !== undefined ? Math.round(dto.amount) : existingExpense.amount;
+    const newDescription = dto.description !== undefined ? dto.description.trim() : existingExpense.description;
+    const newCurrency = dto.currency !== undefined ? dto.currency : existingExpense.currency;
+    const newCategory = dto.category !== undefined ? dto.category : (existingExpense as any).category || 'EXPENSE';
+    const newPayerId = dto.payerId !== undefined ? dto.payerId : existingExpense.payerId;
+
+    if (dto.payerId) {
+      await this.verifyTripMembership(tripId, dto.payerId);
+    }
+
+    let newSplits = dto.splits;
+    if (newSplits) {
+      const splitsTotal = newSplits.reduce((sum, s) => sum + s.amount, 0);
+      if (splitsTotal !== newAmount) {
+        throw new BadRequestException(
+          `Split amounts (${splitsTotal}) must equal expense amount (${newAmount})`,
+        );
+      }
+      for (const split of newSplits) {
+        await this.verifyTripMembership(tripId, split.userId);
+      }
+    }
+
+    // Diff with readable units (converted from cents to actual amount)
+    const diffs: Record<string, any> = {};
+    if (dto.description && dto.description !== existingExpense.description) {
+      diffs.description = { from: existingExpense.description, to: newDescription };
+    }
+    if (dto.amount !== undefined && dto.amount !== existingExpense.amount) {
+      diffs.amount = {
+        from: `${existingExpense.currency || 'INR'} ${(existingExpense.amount / 100).toFixed(2)}`,
+        to: `${newCurrency} ${(newAmount / 100).toFixed(2)}`,
+      };
+    }
+    if (dto.currency && dto.currency !== existingExpense.currency) {
+      diffs.currency = { from: existingExpense.currency, to: newCurrency };
+    }
+    if (dto.payerId && dto.payerId !== existingExpense.payerId) {
+      diffs.payerId = { from: existingExpense.payerId, to: newPayerId };
+    }
+    if (dto.splits) {
+      diffs.splits = { fromCount: existingExpense.splits.length, toCount: newSplits!.length };
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (newSplits) {
+        await tx.expenseSplit.deleteMany({
+          where: { expenseId },
+        });
+        await tx.expenseSplit.createMany({
+          data: newSplits.map((s) => ({
+            expenseId,
+            userId: s.userId,
+            amount: Math.round(s.amount),
+          })),
+        });
+      }
+
+      const res = await tx.expense.update({
+        where: { id: expenseId },
+        data: {
+          description: newDescription,
+          amount: newAmount,
+          currency: newCurrency,
+          category: newCategory,
+          payerId: newPayerId,
+        } as any,
+        include: {
+          payer: true,
+          splits: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
+
+      return res;
+    });
+
+    // Write audit log
+    try {
+      const editor = await this.prisma.user.findUnique({ where: { id: userId } });
+      const changeSummary = Object.keys(diffs).length > 0
+        ? `Updated ${Object.keys(diffs).join(', ')} by ${editor?.name || editor?.email || 'Member'}`
+        : `Edited by ${editor?.name || editor?.email || 'Member'}`;
+
+      await (this.prisma as any).expenseAuditLog.create({
+        data: {
+          expenseId,
+          userId,
+          action: 'UPDATED',
+          details: dto.changeReason ? `${changeSummary} (Reason: ${dto.changeReason})` : changeSummary,
+          changes: JSON.stringify(diffs),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to write audit log for expense update:', e);
+    }
+
+    await this.recalculateBalances(tripId);
+
+    return this.formatExpense(updated);
+  }
+
+  async getExpenseAuditLogs(tripId: string, expenseId: string, userId: string) {
+    await this.verifyTripMembership(tripId, userId);
+
+    const expense = await this.prisma.expense.findUnique({
+      where: { id: expenseId },
+    });
+
+    if (!expense || expense.tripId !== tripId) {
+      throw new NotFoundException('Expense not found');
+    }
+
+    try {
+      const logs = await (this.prisma as any).expenseAuditLog.findMany({
+        where: { expenseId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatar: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return logs.map((log: any) => ({
+        id: log.id,
+        expenseId: log.expenseId,
+        userId: log.userId,
+        user: log.user,
+        action: log.action,
+        details: log.details,
+        changes: log.changes ? JSON.parse(log.changes) : null,
+        createdAt: log.createdAt,
+      }));
+    } catch (e) {
+      console.warn('Failed to fetch audit logs:', e);
+      return [];
+    }
   }
 
   async getExpense(tripId: string, expenseId: string, userId: string) {
@@ -96,7 +286,24 @@ export class ExpensesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return expenses.map((e: any) => this.formatExpense(e));
+    let auditLogMap = new Map<string, number>();
+    try {
+      const logs = await (this.prisma as any).expenseAuditLog.findMany({
+        where: {
+          expenseId: { in: expenses.map((e) => e.id) },
+        },
+      });
+      for (const log of logs) {
+        auditLogMap.set(log.expenseId, (auditLogMap.get(log.expenseId) || 0) + 1);
+      }
+    } catch (e) {
+      // Ignore if table not populated
+    }
+
+    return expenses.map((e: any) => ({
+      ...this.formatExpense(e),
+      editCount: auditLogMap.get(e.id) || 1,
+    }));
   }
 
   async deleteExpense(tripId: string, expenseId: string, userId: string) {
@@ -110,16 +317,24 @@ export class ExpensesService {
       throw new NotFoundException('Expense not found');
     }
 
-    if (expense.payerId !== userId) {
-      throw new ForbiddenException('Only the payer can delete an expense');
+    const tripRole = await this.prisma.tripRole.findUnique({
+      where: {
+        tripId_userId: {
+          tripId,
+          userId,
+        },
+      },
+    });
+
+    const isOwner = tripRole?.role === 'OWNER';
+    if (expense.payerId !== userId && !isOwner) {
+      throw new ForbiddenException('Only the payer or trip owner can delete an expense');
     }
 
-    // Delete expense (splits cascade delete)
     await this.prisma.expense.delete({
       where: { id: expenseId },
     });
 
-    // Recalculate balances
     await this.recalculateBalances(tripId);
 
     return { success: true };
@@ -132,22 +347,36 @@ export class ExpensesService {
       where: { tripId },
     });
 
+    const userIds = Array.from(new Set([...balances.map((b) => b.fromUserId), ...balances.map((b) => b.toUserId)]));
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
     return balances.map((b: any) => ({
       fromUserId: b.fromUserId,
+      fromUser: userMap.get(b.fromUserId) || { id: b.fromUserId, name: 'User' },
       toUserId: b.toUserId,
-      amount: b.balance, // positive means from owes to
+      toUser: userMap.get(b.toUserId) || { id: b.toUserId, name: 'User' },
+      amount: b.balance,
     }));
   }
 
   async getSettlementSuggestions(tripId: string, userId: string) {
     await this.verifyTripMembership(tripId, userId);
 
-    // Get all balances for the trip
     const balances = await this.prisma.expenseBalance.findMany({
       where: { tripId },
     });
 
-    // Collect net balances for each user
+    const userIds = Array.from(new Set([...balances.map((b) => b.fromUserId), ...balances.map((b) => b.toUserId)]));
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
     const netBalances = new Map<string, number>();
 
     for (const balance of balances) {
@@ -158,7 +387,6 @@ export class ExpensesService {
       netBalances.set(balance.toUserId, toCurrent + balance.balance);
     }
 
-    // Generate suggestions
     const suggestions: any[] = [];
     const debtors = Array.from(netBalances.entries())
       .filter(([, amount]) => amount < 0)
@@ -179,12 +407,14 @@ export class ExpensesService {
 
       suggestions.push({
         from: debtorId,
+        fromName: userMap.get(debtorId)?.name || userMap.get(debtorId)?.email || debtorId,
         to: creditorId,
+        toName: userMap.get(creditorId)?.name || userMap.get(creditorId)?.email || creditorId,
         amount,
       });
 
-      debtors[debtorIdx][1] += amount; // reduce debt
-      creditors[creditorIdx][1] -= amount; // reduce credit
+      debtors[debtorIdx][1] += amount;
+      creditors[creditorIdx][1] -= amount;
 
       if (debtors[debtorIdx][1] === 0) debtorIdx++;
       if (creditors[creditorIdx][1] === 0) creditorIdx++;
@@ -194,12 +424,10 @@ export class ExpensesService {
   }
 
   private async recalculateBalances(tripId: string) {
-    // Clear existing balances
     await this.prisma.expenseBalance.deleteMany({
       where: { tripId },
     });
 
-    // Get all expenses for trip
     const expenses = await this.prisma.expense.findMany({
       where: { tripId },
       include: {
@@ -207,16 +435,14 @@ export class ExpensesService {
       },
     });
 
-    // Calculate balances
     const balanceMap = new Map<string, Map<string, number>>();
 
     for (const expense of expenses) {
       const payerId = expense.payerId;
 
       for (const split of expense.splits) {
-        if (split.userId === payerId) continue; // Skip if payer is in splits
+        if (split.userId === payerId) continue;
 
-        // split.userId owes payerId
         if (!balanceMap.has(split.userId)) {
           balanceMap.set(split.userId, new Map());
         }
@@ -225,7 +451,6 @@ export class ExpensesService {
       }
     }
 
-    // Insert balances into database
     const balancesToCreate: any[] = [];
     for (const [fromUserId, userBalances] of balanceMap.entries()) {
       for (const [toUserId, amount] of userBalances.entries()) {
@@ -266,23 +491,25 @@ export class ExpensesService {
       tripId: expense.tripId,
       payerId: expense.payerId,
       payer: {
-        id: expense.payer.id,
-        name: expense.payer.name,
-        email: expense.payer.email,
+        id: expense.payer?.id || expense.payerId,
+        name: expense.payer?.name || 'Member',
+        email: expense.payer?.email || '',
       },
       description: expense.description,
       amount: expense.amount,
-      currency: expense.currency,
-      splits: expense.splits.map((s: any) => ({
+      currency: expense.currency || 'INR',
+      category: expense.category || 'EXPENSE',
+      splits: (expense.splits || []).map((s: any) => ({
         userId: s.userId,
         user: {
-          id: s.user.id,
-          name: s.user.name,
-          email: s.user.email,
+          id: s.user?.id || s.userId,
+          name: s.user?.name || 'Member',
+          email: s.user?.email || '',
         },
         amount: s.amount,
       })),
       createdAt: expense.createdAt,
+      updatedAt: expense.updatedAt,
     };
   }
 }

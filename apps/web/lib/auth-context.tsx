@@ -3,10 +3,14 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '@/lib/api';
 
-interface User {
+export interface User {
   id: string;
   email: string;
   name: string;
+  avatar?: string | null;
+  googleId?: string | null;
+  facebookId?: string | null;
+  createdAt?: string;
 }
 
 interface AuthContextType {
@@ -15,6 +19,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
+  oauthLogin: (data: { provider: 'google' | 'facebook' | 'apple'; email: string; name: string; avatar?: string; providerId?: string }) => Promise<void>;
+  setSession: (token: string, user: User) => void;
+  updateUser: (updatedUser: Partial<User>) => void;
   logout: () => void;
 }
 
@@ -54,6 +61,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(response.data.user);
   };
 
+  const oauthLogin = async (data: { provider: 'google' | 'facebook' | 'apple'; email: string; name: string; avatar?: string; providerId?: string }) => {
+    const response = await authApi.oauthLogin(data);
+    localStorage.setItem('accessToken', response.data.accessToken);
+    setUser(response.data.user);
+  };
+
+  const setSession = (token: string, userObj: User) => {
+    localStorage.setItem('accessToken', token);
+    setUser(userObj);
+  };
+
+  const updateUser = (updatedUser: Partial<User>) => {
+    setUser((prev) => (prev ? { ...prev, ...updatedUser } : (updatedUser as User)));
+  };
+
   const logout = () => {
     localStorage.removeItem('accessToken');
     setUser(null);
@@ -67,6 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: user !== null,
         login,
         register,
+        oauthLogin,
+        setSession,
+        updateUser,
         logout,
       }}
     >
@@ -82,3 +107,4 @@ export function useAuth() {
   }
   return context;
 }
+

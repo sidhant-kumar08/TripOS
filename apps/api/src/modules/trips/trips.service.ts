@@ -258,6 +258,164 @@ export class TripsService {
     return trip;
   }
 
+  async declineInvitation(token: string, userId: string) {
+    const invitation = await this.prisma.tripInvitation.findUnique({
+      where: { token },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (invitation.email && user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      throw new ForbiddenException(
+        `This invitation was sent to ${invitation.email}. You cannot decline it.`,
+      );
+    }
+
+    await this.prisma.tripInvitation.delete({
+      where: { id: invitation.id },
+    });
+
+    return { success: true, message: 'Invitation declined' };
+  }
+
+  async getUserPendingInvitations(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const invitations = await this.prisma.tripInvitation.findMany({
+      where: {
+        email: user.email.toLowerCase(),
+        usedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    const result = await Promise.all(
+      invitations.map(async (inv) => {
+        const trip = await this.prisma.trip.findUnique({
+          where: { id: inv.tripId },
+          include: {
+            members: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        });
+
+        const owner = trip?.members.find((m) => m.role === 'OWNER');
+
+        return {
+          id: inv.id,
+          token: inv.token,
+          email: inv.email,
+          createdAt: inv.createdAt,
+          expiresAt: inv.expiresAt,
+          tripId: inv.tripId,
+          tripName: trip?.name || 'Trip Workspace',
+          destination: trip?.destination,
+          description: trip?.description,
+          startDate: trip?.startDate,
+          endDate: trip?.endDate,
+          membersCount: trip?.members.length || 1,
+          inviterName: owner?.user.name || owner?.user.email || 'Trip Organizer',
+        };
+      }),
+    );
+
+    return result;
+  }
+
+  async getTripPendingInvitations(tripId: string, userId: string) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        members: true,
+      },
+    });
+
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const userRole = trip.members.find((m) => m.userId === userId);
+    if (!userRole || !['OWNER', 'ADMIN'].includes(userRole.role)) {
+      throw new ForbiddenException(
+        'Only trip owners and admins can view pending invitations',
+      );
+    }
+
+    const invitations = await this.prisma.tripInvitation.findMany({
+      where: {
+        tripId,
+        usedAt: null,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return invitations.map((inv) => ({
+      id: inv.id,
+      email: inv.email,
+      token: inv.token,
+      createdAt: inv.createdAt,
+      expiresAt: inv.expiresAt,
+    }));
+  }
+
+  async revokeInvitation(tripId: string, invitationId: string, userId: string) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        members: true,
+      },
+    });
+
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const userRole = trip.members.find((m) => m.userId === userId);
+    if (!userRole || !['OWNER', 'ADMIN'].includes(userRole.role)) {
+      throw new ForbiddenException(
+        'Only trip owners and admins can revoke invitations',
+      );
+    }
+
+    await this.prisma.tripInvitation.deleteMany({
+      where: {
+        id: invitationId,
+        tripId,
+      },
+    });
+
+    return { success: true, message: 'Invitation revoked' };
+  }
+
   private formatTrip(trip: any) {
     return {
       id: trip.id,

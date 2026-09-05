@@ -8,6 +8,14 @@ import {
   ArrowRightLeft,
   Trash2,
   Receipt,
+  Edit3,
+  History,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  User,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from 'lucide-react';
 import axios from 'axios';
 import { API_BASE_URL } from '@/lib/runtime-config';
@@ -21,10 +29,16 @@ import { Modal } from '@/components/ui/modal';
 import { StatCard } from '@/components/shared/stat-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils';
+import { expensesApi } from '@/lib/api';
 
 interface ExpenseSplit {
   userId: string;
   amount: number;
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
 }
 
 interface Expense {
@@ -32,16 +46,48 @@ interface Expense {
   description: string;
   amount: number;
   payerId: string;
+  payer?: {
+    id: string;
+    name?: string;
+    email?: string;
+  };
   payerName?: string;
   currency: string;
+  category?: 'EXPENSE' | 'LEND_BORROW' | 'SETTLEMENT';
   splits: ExpenseSplit[];
+  editCount?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface Settlement {
   from: string;
+  fromName?: string;
   to: string;
+  toName?: string;
   amount: number;
+}
+
+interface BalanceItem {
+  fromUserId: string;
+  fromUser?: { id: string; name?: string; email?: string };
+  toUserId: string;
+  toUser?: { id: string; name?: string; email?: string };
+  amount: number; // positive: fromUser owes toUser
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  details?: string;
+  changes?: Record<string, any>;
+  createdAt: string;
+  user?: {
+    id: string;
+    name?: string;
+    email?: string;
+    avatar?: string;
+  };
 }
 
 export default function ExpensesPage() {
@@ -51,19 +97,34 @@ export default function ExpensesPage() {
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [balances, setBalances] = useState<BalanceItem[]>([]);
   const [tripMembers, setTripMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'expenses' | 'settlements'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'recordbook' | 'settlements'>('expenses');
 
-  // Modal State
-  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
+  // Modal State (Add / Edit)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form Fields
+  const [category, setCategory] = useState<'EXPENSE' | 'LEND_BORROW' | 'SETTLEMENT'>('EXPENSE');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('INR');
+  const [payerId, setPayerId] = useState<string>('');
+  const [borrowerId, setBorrowerId] = useState<string>('');
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
   const [customSplits, setCustomSplits] = useState<Record<string, string>>({});
+  const [changeReason, setChangeReason] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Audit History Modal State
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState<AuditLog[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedExpenseForHistory, setSelectedExpenseForHistory] = useState<Expense | null>(null);
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
@@ -81,10 +142,11 @@ export default function ExpensesPage() {
       setLoading(true);
       const config = { headers: getAuthHeader() };
 
-      const [tripRes, expensesRes, settlementsRes] = await Promise.all([
+      const [tripRes, expensesRes, settlementsRes, balancesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/trips/${tripId}`, config).catch(() => ({ data: null })),
-        axios.get(`${API_BASE_URL}/trips/${tripId}/expenses`, config).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/expenses/settlement/suggestions?tripId=${tripId}`, config).catch(() => ({ data: [] })),
+        expensesApi.list(tripId).catch(() => ({ data: [] })),
+        expensesApi.getSettlements(tripId).catch(() => ({ data: [] })),
+        expensesApi.getBalances(tripId).catch(() => ({ data: [] })),
       ]);
 
       if (tripRes.data?.members) {
@@ -92,6 +154,7 @@ export default function ExpensesPage() {
       }
       setExpenses(expensesRes.data || []);
       setSettlements(settlementsRes.data || []);
+      setBalances(balancesRes.data || []);
     } catch (error) {
       console.error('Failed to fetch expenses:', error);
     } finally {
@@ -99,7 +162,62 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleCreateExpense = async (e: React.FormEvent) => {
+  const openAddModal = (mode: 'EXPENSE' | 'LEND_BORROW' | 'SETTLEMENT' = 'EXPENSE', prefillToUser?: string) => {
+    resetForm();
+    setIsEditing(false);
+    setEditingExpenseId(null);
+    setCategory(mode);
+    if (user?.id) setPayerId(user.id);
+    if (prefillToUser) setBorrowerId(prefillToUser);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (expense: Expense) => {
+    resetForm();
+    setIsEditing(true);
+    setEditingExpenseId(expense.id);
+    setCategory(expense.category || 'EXPENSE');
+    setDescription(expense.description);
+    setAmount((expense.amount / 100).toString());
+    setCurrency(expense.currency || 'INR');
+    setPayerId(expense.payerId || expense.payer?.id || user?.id || '');
+
+    if (expense.category === 'LEND_BORROW' || expense.category === 'SETTLEMENT') {
+      const otherSplit = expense.splits.find((s) => s.userId !== expense.payerId);
+      if (otherSplit) {
+        setBorrowerId(otherSplit.userId);
+      }
+    } else {
+      const splits = expense.splits || [];
+      const isEq = splits.length > 0 && splits.every((s) => Math.abs(s.amount - splits[0].amount) <= 1);
+      setSplitType(isEq ? 'equal' : 'custom');
+
+      const splitObj: Record<string, string> = {};
+      splits.forEach((s) => {
+        splitObj[s.userId] = (s.amount / 100).toString();
+      });
+      setCustomSplits(splitObj);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  const openHistoryModal = async (expense: Expense) => {
+    setSelectedExpenseForHistory(expense);
+    setIsHistoryModalOpen(true);
+    setHistoryLoading(true);
+    try {
+      const res = await expensesApi.getHistory(tripId, expense.id);
+      setHistoryLogs(res.data || []);
+    } catch (err) {
+      console.error('Failed to load history logs:', err);
+      setHistoryLogs([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim() || !amount) return;
 
@@ -107,21 +225,30 @@ export default function ExpensesPage() {
       setIsSubmitting(true);
       setErrorMessage('');
 
-      const parsedAmount = Math.round(parseFloat(amount) * 100); // convert dollars to cents
+      const parsedAmount = Math.round(parseFloat(amount) * 100);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        setErrorMessage('Please enter a valid expense amount.');
+        setErrorMessage('Please enter a valid amount.');
         return;
       }
 
-      // Build splits
       const activeMembers = tripMembers.length > 0 ? tripMembers : [{ userId: user?.id || 'current_user' }];
       let splits: ExpenseSplit[] = [];
 
-      if (splitType === 'equal') {
+      if (category === 'LEND_BORROW' || category === 'SETTLEMENT') {
+        const targetBorrower = borrowerId || (activeMembers.find((m: any) => (m.userId || m.id) !== payerId)?.userId || payerId);
+        splits = [
+          {
+            userId: targetBorrower,
+            amount: parsedAmount,
+          },
+        ];
+      } else if (splitType === 'equal') {
         const splitAmount = Math.round(parsedAmount / activeMembers.length);
-        splits = activeMembers.map((m: any) => ({
+        const remainder = parsedAmount - splitAmount * activeMembers.length;
+
+        splits = activeMembers.map((m: any, idx: number) => ({
           userId: m.userId || m.id,
-          amount: splitAmount,
+          amount: idx === 0 ? splitAmount + remainder : splitAmount,
         }));
       } else {
         splits = activeMembers.map((m: any) => {
@@ -132,35 +259,44 @@ export default function ExpensesPage() {
             amount: Math.round(userVal * 100),
           };
         });
+
+        const customTotal = splits.reduce((sum, s) => sum + s.amount, 0);
+        if (customTotal !== parsedAmount) {
+          setErrorMessage(`Custom split sum (${(customTotal / 100).toFixed(2)}) must equal total amount (${(parsedAmount / 100).toFixed(2)})`);
+          return;
+        }
       }
 
-      const config = { headers: getAuthHeader() };
-      await axios.post(
-        `${API_BASE_URL}/trips/${tripId}/expenses`,
-        {
-          description: description.trim(),
-          amount: parsedAmount,
-          currency,
-          splits,
-        },
-        config
-      );
+      const payload = {
+        description: description.trim(),
+        amount: parsedAmount,
+        currency,
+        category,
+        payerId: payerId || user?.id,
+        splits,
+        ...(isEditing && changeReason ? { changeReason: changeReason.trim() } : {}),
+      };
 
-      setIsAddExpenseModalOpen(false);
+      if (isEditing && editingExpenseId) {
+        await expensesApi.update(tripId, editingExpenseId, payload);
+      } else {
+        await expensesApi.create(tripId, payload);
+      }
+
+      setIsModalOpen(false);
       resetForm();
       fetchData();
     } catch (error: any) {
-      setErrorMessage(error.response?.data?.message || 'Failed to add expense');
+      setErrorMessage(error.response?.data?.message || 'Failed to save transaction');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return;
+    if (!confirm('Are you sure you want to delete this transaction? All balances will be recalculated automatically.')) return;
     try {
-      const config = { headers: getAuthHeader() };
-      await axios.delete(`${API_BASE_URL}/trips/${tripId}/expenses/${expenseId}`, config);
+      await expensesApi.delete(tripId, expenseId);
       fetchData();
     } catch (error) {
       console.error('Failed to delete expense:', error);
@@ -171,58 +307,108 @@ export default function ExpensesPage() {
     setDescription('');
     setAmount('');
     setCurrency('INR');
+    setCategory('EXPENSE');
+    setPayerId(user?.id || '');
+    setBorrowerId('');
     setSplitType('equal');
     setCustomSplits({});
+    setChangeReason('');
     setErrorMessage('');
   };
 
-  // Compute summary metrics & primary currency
+  // Summary Metrics
   const primaryCurrency = expenses.length > 0 ? (expenses[0].currency || 'INR') : 'INR';
-  const totalTripSpend = expenses.reduce((acc: number, curr: Expense) => acc + curr.amount, 0);
+  const totalTripSpend = expenses
+    .filter((e) => e.category !== 'SETTLEMENT')
+    .reduce((acc: number, curr: Expense) => acc + curr.amount, 0);
+
+  let userOwedToYou = 0;
+  let userYouOwe = 0;
+
+  for (const b of balances) {
+    if (b.toUserId === user?.id) {
+      userOwedToYou += b.amount;
+    }
+    if (b.fromUserId === user?.id) {
+      userYouOwe += b.amount;
+    }
+  }
+
+  const netUserBalance = userOwedToYou - userYouOwe;
 
   return (
     <PageShell
-      title="Trip Expenses & Splits"
-      subtitle="Track shared costs, equal and custom splits, and debt-simplifying settlements."
+      title="Trip Expenses & Record Book"
+      subtitle="Easily track shared costs, 1-on-1 money owed or borrowed, and simplified group settlements."
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },
         { label: 'Trip Overview', href: `/trips/${tripId}` },
         { label: 'Expenses' },
       ]}
       actions={
-        <Button onClick={() => setIsAddExpenseModalOpen(true)} className="shadow-md shadow-emerald-600/20">
-          <Plus className="h-4 w-4 mr-1" />
-          Add Expense
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => openAddModal('LEND_BORROW')}
+            variant="outline"
+            className="border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40 shadow-sm"
+          >
+            <ArrowRightLeft className="h-4 w-4 mr-1.5" />
+            Record Loan / Borrow
+          </Button>
+          <Button onClick={() => openAddModal('EXPENSE')} className="shadow-md shadow-emerald-600/20">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add Expense
+          </Button>
+        </div>
       }
     >
-      {/* Metric Cards Banner */}
+      {/* Streamlined Metrics Summary */}
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Total Trip Spend"
           value={formatCurrency(totalTripSpend, primaryCurrency)}
-          subtext={`${expenses.length} recorded expense${expenses.length === 1 ? '' : 's'}`}
+          subtext={`${expenses.length} transaction${expenses.length === 1 ? '' : 's'} recorded`}
           icon={<span className="font-bold text-sm">{getCurrencySymbol(primaryCurrency)}</span>}
           variant="indigo"
         />
         <StatCard
+          label="Your Balance"
+          value={
+            netUserBalance > 0
+              ? `+${formatCurrency(netUserBalance, primaryCurrency)}`
+              : netUserBalance < 0
+              ? `-${formatCurrency(Math.abs(netUserBalance), primaryCurrency)}`
+              : '₹0.00'
+          }
+          subtext={
+            netUserBalance > 0
+              ? 'You are owed by friends'
+              : netUserBalance < 0
+              ? 'You owe friends money'
+              : 'All your debts are balanced'
+          }
+          icon={
+            netUserBalance > 0 ? (
+              <ArrowDownLeft className="h-4 w-4 text-emerald-500" />
+            ) : netUserBalance < 0 ? (
+              <ArrowUpRight className="h-4 w-4 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            )
+          }
+          variant={netUserBalance > 0 ? 'success' : netUserBalance < 0 ? 'warning' : 'default'}
+        />
+        <StatCard
           label="Settlements Needed"
           value={settlements.length}
-          subtext={settlements.length === 0 ? 'All debts balanced' : 'Simplified transactions'}
+          subtext={settlements.length === 0 ? 'All debts cleared' : 'Direct payments to settle all'}
           icon={<ArrowRightLeft className="h-4 w-4" />}
           variant={settlements.length === 0 ? 'success' : 'warning'}
         />
-        <StatCard
-          label="Deterministic Engine"
-          value="Audited"
-          subtext="Zero rounding errors"
-          icon={<span className="font-bold text-sm">{getCurrencySymbol(primaryCurrency)}</span>}
-          variant="default"
-        />
       </div>
 
-      {/* Segmented View Switcher */}
-      <div className="mb-6 flex rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-fit">
+      {/* Segmented Navigation Switcher */}
+      <div className="mb-6 flex flex-wrap rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-fit gap-1">
         <button
           onClick={() => setActiveTab('expenses')}
           className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
@@ -232,7 +418,18 @@ export default function ExpensesPage() {
           }`}
         >
           <Receipt className="h-3.5 w-3.5" />
-          Expenses Ledger ({expenses.length})
+          Transactions ({expenses.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('recordbook')}
+          className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+            activeTab === 'recordbook'
+              ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-400'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          Who Owes Who ({balances.length})
         </button>
         <button
           onClick={() => setActiveTab('settlements')}
@@ -243,53 +440,82 @@ export default function ExpensesPage() {
           }`}
         >
           <ArrowRightLeft className="h-3.5 w-3.5" />
-          Smart Settlement Matrix ({settlements.length})
+          Simplified Settlements ({settlements.length})
         </button>
       </div>
 
-      {/* VIEW 1: EXPENSES LEDGER */}
+      {/* VIEW 1: TRANSACTIONS LEDGER */}
       {activeTab === 'expenses' && (
         <div className="space-y-4">
           {loading ? (
             <div className="trip-glass-card rounded-2xl p-8 text-center animate-pulse">
-              <p className="text-sm text-slate-500">Loading ledger...</p>
+              <p className="text-sm text-slate-500">Loading transactions...</p>
             </div>
           ) : expenses.length === 0 ? (
             <EmptyState
               icon={<Receipt className="h-8 w-8" />}
-              title="No expenses recorded yet"
-              description="Record dinner, accommodation, or ticket costs so everyone's share is tracked automatically."
-              actionLabel="+ Add First Expense"
-              onAction={() => setIsAddExpenseModalOpen(true)}
+              title="No transactions recorded yet"
+              description="Record group bills, meal costs, or personal loans so debts and splits are tracked automatically."
+              actionLabel="Add First Expense"
+              onAction={() => openAddModal('EXPENSE')}
             />
           ) : (
             <div className="space-y-3">
               {expenses.map((expense: Expense) => (
                 <div
                   key={expense.id}
-                  className="trip-glass-card rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  className="trip-glass-card rounded-2xl p-4 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
                   <div className="flex items-start gap-3.5">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-inner font-bold text-base">
-                      {getCurrencySymbol(expense.currency || 'INR')}
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-bold text-base shadow-inner ${
+                      expense.category === 'LEND_BORROW'
+                        ? 'bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300'
+                        : expense.category === 'SETTLEMENT'
+                        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300'
+                        : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300'
+                    }`}>
+                      {expense.category === 'LEND_BORROW' ? '🤝' : expense.category === 'SETTLEMENT' ? '💸' : getCurrencySymbol(expense.currency || 'INR')}
                     </div>
                     <div>
-                      <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                        {expense.description}
-                      </h4>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                          {expense.description}
+                        </h4>
+                        {expense.category === 'LEND_BORROW' && (
+                          <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 text-[11px]">
+                            Loan / Borrow
+                          </Badge>
+                        )}
+                        {expense.category === 'SETTLEMENT' && (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 text-[11px]">
+                            Repayment
+                          </Badge>
+                        )}
+                      </div>
+
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                        <span>Paid by <strong className="text-slate-700 dark:text-slate-200">{expense.payerName || 'Member'}</strong></span>
+                        <span>Paid by <strong className="text-slate-700 dark:text-slate-200">{expense.payer?.name || expense.payer?.email || 'Member'}</strong></span>
                         <span>•</span>
                         <span>{formatDate(expense.createdAt)}</span>
                         <span>•</span>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="text-[10px]">
                           {expense.splits?.length || 1} split{(expense.splits?.length || 1) > 1 ? 's' : ''}
                         </Badge>
+                        {(expense.editCount || 0) > 1 && (
+                          <button
+                            onClick={() => openHistoryModal(expense)}
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 transition text-[11px]"
+                            title="View edit history"
+                          >
+                            <Clock className="h-3 w-3" />
+                            Edited ({expense.editCount}x)
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
                     <div className="text-right">
                       <p className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
                         {formatCurrency(expense.amount, expense.currency || 'INR')}
@@ -298,13 +524,32 @@ export default function ExpensesPage() {
                         {expense.currency || 'INR'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleDeleteExpense(expense.id)}
-                      className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 transition"
-                      title="Delete expense"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openHistoryModal(expense)}
+                        className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
+                        title="View edit history"
+                      >
+                        <History className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={() => openEditModal(expense)}
+                        className="rounded-xl p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/50 dark:hover:text-indigo-400 transition"
+                        title="Edit transaction"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteExpense(expense.id)}
+                        className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 transition"
+                        title="Delete transaction"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -313,14 +558,113 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {/* VIEW 2: SETTLEMENTS MATRIX */}
+      {/* VIEW 2: RECORD BOOK (WHO OWES WHO) */}
+      {activeTab === 'recordbook' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-emerald-600" />
+                  Who Owes Who (Record Book)
+                </CardTitle>
+                <CardDescription>
+                  Direct summary of all outstanding money between members. Click "Settle Up" when someone pays back.
+                </CardDescription>
+              </div>
+              <Button
+                onClick={() => openAddModal('LEND_BORROW')}
+                variant="default"
+                className="shrink-0"
+              >
+                Record Loan / Borrow
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {balances.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-8 text-center dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                  <p className="mt-3 text-base font-bold text-slate-900 dark:text-white">
+                    All balances are settled!
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    No member owes any money to another member right now.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {balances.map((bal, idx) => {
+                    const fromIsYou = bal.fromUserId === user?.id;
+                    const toIsYou = bal.toUserId === user?.id;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`rounded-2xl border p-4 shadow-sm transition-all flex flex-col justify-between gap-3 ${
+                          toIsYou
+                            ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                            : fromIsYou
+                            ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/20'
+                            : 'border-slate-200 bg-white/70 dark:border-slate-800 dark:bg-slate-900/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-white">
+                              <span>{fromIsYou ? 'You' : bal.fromUser?.name || bal.fromUser?.email || 'Member'}</span>
+                              <span className="text-xs font-semibold text-rose-500 dark:text-rose-400">owes</span>
+                              <span>{toIsYou ? 'You' : bal.toUser?.name || bal.toUser?.email || 'Member'}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {toIsYou
+                                ? 'They should pay you back'
+                                : fromIsYou
+                                ? 'You should pay them back'
+                                : 'Direct split balance'}
+                            </p>
+                          </div>
+
+                          <span className={`text-lg font-extrabold ${
+                            toIsYou
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : fromIsYou
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-slate-900 dark:text-white'
+                          }`}>
+                            {formatCurrency(bal.amount, primaryCurrency)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t pt-2 border-slate-100 dark:border-slate-800/80">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              openAddModal('SETTLEMENT', toIsYou ? bal.fromUserId : bal.toUserId);
+                            }}
+                            className="text-xs h-7 py-1 px-2.5"
+                          >
+                            💸 Settle Up
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* VIEW 3: SIMPLIFIED SETTLEMENTS */}
       {activeTab === 'settlements' && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Debt-Simplification Settlements</CardTitle>
+              <CardTitle>Simplified Settlements</CardTitle>
               <CardDescription>
-                TripOS calculates the minimal number of transactions required so all debts are cleared with zero hassle.
+                TripOS calculates the minimal number of payments to clear all debts across the group with zero circular transfers.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -343,12 +687,12 @@ export default function ExpensesPage() {
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                          <span>{settlement.from}</span>
+                          <span>{settlement.fromName || settlement.from}</span>
                           <span className="text-indigo-600 dark:text-indigo-400 font-bold">→ pays →</span>
-                          <span>{settlement.to}</span>
+                          <span>{settlement.toName || settlement.to}</span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Direct settlement transaction
+                          Direct payment settlement
                         </p>
                       </div>
                       <div className="text-right">
@@ -365,27 +709,92 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {/* ADD EXPENSE MODAL */}
+      {/* ADD / EDIT TRANSACTION MODAL */}
       <Modal
-        isOpen={isAddExpenseModalOpen}
+        isOpen={isModalOpen}
         onClose={() => {
-          setIsAddExpenseModalOpen(false);
+          setIsModalOpen(false);
           resetForm();
         }}
-        title="Add Group Expense"
-        description="Log a shared cost and choose how it is divided among trip members."
+        title={
+          isEditing
+            ? 'Edit Transaction'
+            : category === 'LEND_BORROW'
+            ? 'Record Loan / Borrow'
+            : category === 'SETTLEMENT'
+            ? 'Record Debt Settle Up'
+            : 'Add Group Expense'
+        }
+        description={
+          isEditing
+            ? 'Update transaction details. Any changes will be logged in the version history.'
+            : category === 'LEND_BORROW'
+            ? 'Record money lent or borrowed directly between two people.'
+            : category === 'SETTLEMENT'
+            ? 'Record a payment made to settle an outstanding balance.'
+            : 'Log a shared expense and choose how it is divided among members.'
+        }
         maxWidth="lg"
       >
-        <form onSubmit={handleCreateExpense} className="space-y-4 mt-2">
+        <form onSubmit={handleSaveExpense} className="space-y-4 mt-2">
           {errorMessage && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200">
               {errorMessage}
             </div>
           )}
 
+          {!isEditing && (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                What are you recording?
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCategory('EXPENSE')}
+                  className={`rounded-xl border p-2.5 text-center text-xs font-semibold transition ${
+                    category === 'EXPENSE'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  💳 Group Expense
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategory('LEND_BORROW')}
+                  className={`rounded-xl border p-2.5 text-center text-xs font-semibold transition ${
+                    category === 'LEND_BORROW'
+                      ? 'border-purple-600 bg-purple-50 text-purple-900 dark:bg-purple-950/50 dark:text-purple-200 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  🤝 Loan / Borrow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategory('SETTLEMENT')}
+                  className={`rounded-xl border p-2.5 text-center text-xs font-semibold transition ${
+                    category === 'SETTLEMENT'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  💸 Settle Up
+                </button>
+              </div>
+            </div>
+          )}
+
           <Input
-            label="Expense Description *"
-            placeholder="e.g. Cliffside Seafood Dinner with Wine 🍷"
+            label="Description *"
+            placeholder={
+              category === 'LEND_BORROW'
+                ? 'e.g. Lent cash for scooter fuel ⛽'
+                : category === 'SETTLEMENT'
+                ? 'e.g. Settled up restaurant share via UPI 📲'
+                : 'e.g. Seafood Dinner at Sunset Beach 🦞'
+            }
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             icon={<Receipt className="h-4 w-4" />}
@@ -397,7 +806,7 @@ export default function ExpensesPage() {
               type="number"
               step="0.01"
               min="0.01"
-              label="Total Amount *"
+              label="Amount *"
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -422,46 +831,127 @@ export default function ExpensesPage() {
             </Select>
           </div>
 
-          {/* Split Type Selector */}
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Split Method
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setSplitType('equal')}
-                className={`rounded-xl border p-3 text-left transition ${
-                  splitType === 'equal'
-                    ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
-                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
-                }`}
-              >
-                <div className="text-sm font-semibold">Equal Split</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Divide evenly across all members</div>
-              </button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Select
+              label={category === 'LEND_BORROW' ? 'Lender (Who Paid) *' : 'Paid By *'}
+              value={payerId}
+              onChange={(e) => setPayerId(e.target.value)}
+            >
+              {tripMembers.map((m: any) => {
+                const uid = m.userId || m.id;
+                const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
+                return (
+                  <option key={uid} value={uid}>
+                    {name} {uid === user?.id ? '(You)' : ''}
+                  </option>
+                );
+              })}
+            </Select>
 
-              <button
-                type="button"
-                onClick={() => setSplitType('custom')}
-                className={`rounded-xl border p-3 text-left transition ${
-                  splitType === 'custom'
-                    ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
-                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
-                }`}
+            {(category === 'LEND_BORROW' || category === 'SETTLEMENT') && (
+              <Select
+                label={category === 'LEND_BORROW' ? 'Borrower (Who Received) *' : 'Paid To (Recipient) *'}
+                value={borrowerId}
+                onChange={(e) => setBorrowerId(e.target.value)}
               >
-                <div className="text-sm font-semibold">Custom Split</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Specify custom amounts per person</div>
-              </button>
-            </div>
+                <option value="">Select Member...</option>
+                {tripMembers
+                  .filter((m: any) => (m.userId || m.id) !== payerId)
+                  .map((m: any) => {
+                    const uid = m.userId || m.id;
+                    const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
+                    return (
+                      <option key={uid} value={uid}>
+                        {name} {uid === user?.id ? '(You)' : ''}
+                      </option>
+                    );
+                  })}
+              </Select>
+            )}
           </div>
+
+          {category === 'EXPENSE' && (
+            <div className="space-y-3 pt-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Split Method
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSplitType('equal')}
+                  className={`rounded-xl border p-3 text-left transition ${
+                    splitType === 'equal'
+                      ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Equal Split</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {amount && !isNaN(parseFloat(amount)) && tripMembers.length > 0
+                      ? `Each pays ${getCurrencySymbol(currency)}${(parseFloat(amount) / tripMembers.length).toFixed(2)}`
+                      : 'Divide evenly across all members'}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSplitType('custom')}
+                  className={`rounded-xl border p-3 text-left transition ${
+                    splitType === 'custom'
+                      ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/50 text-indigo-900 dark:text-indigo-200 font-semibold'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Custom Split</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Specify exact amounts per member</div>
+                </button>
+              </div>
+
+              {splitType === 'custom' && (
+                <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Enter individual share ({getCurrencySymbol(currency)}):
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {tripMembers.map((m: any) => {
+                      const uid = m.userId || m.id;
+                      const name = m.user?.name || m.user?.email || m.name || m.email || (uid === user?.id ? 'You' : `Member ${uid.slice(-4)}`);
+                      return (
+                        <div key={uid} className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-slate-600 dark:text-slate-300 truncate max-w-[120px]">{name}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={customSplits[uid] || ''}
+                            onChange={(e) => setCustomSplits({ ...customSplits, [uid]: e.target.value })}
+                            className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isEditing && (
+            <Input
+              label="Reason for Change (Optional)"
+              placeholder="e.g. Corrected tip amount / fixed typo"
+              value={changeReason}
+              onChange={(e) => setChangeReason(e.target.value)}
+              icon={<History className="h-4 w-4" />}
+            />
+          )}
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
             <Button
               type="button"
               variant="secondary"
               onClick={() => {
-                setIsAddExpenseModalOpen(false);
+                setIsModalOpen(false);
                 resetForm();
               }}
             >
@@ -472,10 +962,108 @@ export default function ExpensesPage() {
               variant="default"
               isLoading={isSubmitting}
             >
-              Save Expense
+              {isEditing ? 'Save Changes' : 'Record Transaction'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* AUDIT LOG HISTORY MODAL */}
+      <Modal
+        isOpen={isHistoryModalOpen}
+        onClose={() => {
+          setIsHistoryModalOpen(false);
+          setSelectedExpenseForHistory(null);
+          setHistoryLogs([]);
+        }}
+        title="Transaction Audit History"
+        description={`Version log for "${selectedExpenseForHistory?.description || 'Transaction'}"`}
+        maxWidth="lg"
+      >
+        <div className="space-y-4 mt-2">
+          {historyLoading ? (
+            <div className="p-8 text-center animate-pulse text-sm text-slate-500">
+              Loading audit history...
+            </div>
+          ) : historyLogs.length === 0 ? (
+            <div className="p-6 text-center text-sm text-slate-500">
+              No audit records found for this transaction.
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {historyLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/50 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {log.user?.name ? log.user.name[0].toUpperCase() : <User className="h-3.5 w-3.5" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">
+                          {log.user?.name || log.user?.email || 'Trip Member'}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          {formatDate(log.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant={log.action === 'CREATED' ? 'success' : 'secondary'}>
+                      {log.action}
+                    </Badge>
+                  </div>
+
+                  <p className="text-xs text-slate-700 dark:text-slate-300">
+                    {log.details}
+                  </p>
+
+                  {log.changes && Object.keys(log.changes).length > 0 && (
+                    <div className="mt-2 rounded-xl bg-white p-2.5 text-[11px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      {Object.entries(log.changes).map(([field, diff]: [string, any]) => {
+                        let displayValue = '';
+                        if (typeof diff === 'object' && diff !== null) {
+                          if (diff.from !== undefined && diff.to !== undefined) {
+                            const formatVal = (v: any) => {
+                              if (typeof v === 'number' && v > 100) return `${(v / 100).toFixed(2)}`;
+                              return v;
+                            };
+                            displayValue = `${formatVal(diff.from)} → ${formatVal(diff.to)}`;
+                          } else {
+                            displayValue = JSON.stringify(diff);
+                          }
+                        } else {
+                          displayValue = String(diff);
+                        }
+
+                        return (
+                          <div key={field} className="flex justify-between py-0.5">
+                            <span className="font-semibold capitalize text-slate-500">{field}:</span>
+                            <span>{displayValue}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsHistoryModalOpen(false);
+                setSelectedExpenseForHistory(null);
+              }}
+            >
+              Close History
+            </Button>
+          </div>
+        </div>
       </Modal>
     </PageShell>
   );

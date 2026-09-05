@@ -35,6 +35,18 @@ export const authApi = {
     api.post('/auth/register', { email, name, password }),
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
+  googleCallback: (data: { code: string; redirectUri: string }) =>
+    api.post('/auth/google/callback', data),
+  googleVerifyToken: (data: { idToken: string }) =>
+    api.post('/auth/google/verify-token', data),
+  facebookCallback: (data: { code: string; redirectUri: string }) =>
+    api.post('/auth/facebook/callback', data),
+  oauthLogin: (data: { provider: 'google' | 'facebook' | 'apple'; email: string; name: string; avatar?: string; providerId?: string }) =>
+    api.post('/auth/oauth', data),
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }),
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post('/auth/reset-password', data),
   getMe: () => api.get('/auth/me'),
 };
 
@@ -48,10 +60,33 @@ export const tripsApi = {
     api.get(`/trips/invitations/${token}`),
   acceptInvitation: (token: string) =>
     api.post('/trips/invitations/accept', { token }),
+  declineInvitation: (token: string) =>
+    api.post('/trips/invitations/decline', { token }),
+  getMyPendingInvitations: () =>
+    api.get('/trips/invitations/my-pending'),
+  getTripPendingInvitations: (tripId: string) =>
+    api.get(`/trips/${tripId}/invitations`),
+  revokeInvitation: (tripId: string, invitationId: string) =>
+    api.delete(`/trips/${tripId}/invitations/${invitationId}`),
 };
 
 export const usersApi = {
   getProfile: () => api.get('/users/profile'),
+  updateProfile: (data: { name?: string; avatar?: string }) =>
+    api.put('/users/profile', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/users/change-password', data),
+};
+
+export const expensesApi = {
+  list: (tripId: string) => api.get(`/trips/${tripId}/expenses`),
+  getById: (tripId: string, expenseId: string) => api.get(`/trips/${tripId}/expenses/${expenseId}`),
+  create: (tripId: string, data: any) => api.post(`/trips/${tripId}/expenses`, data),
+  update: (tripId: string, expenseId: string, data: any) => api.put(`/trips/${tripId}/expenses/${expenseId}`, data),
+  delete: (tripId: string, expenseId: string) => api.delete(`/trips/${tripId}/expenses/${expenseId}`),
+  getHistory: (tripId: string, expenseId: string) => api.get(`/trips/${tripId}/expenses/${expenseId}/history`),
+  getBalances: (tripId: string) => api.get(`/trips/${tripId}/expenses/balances/all`),
+  getSettlements: (tripId: string) => api.get(`/trips/${tripId}/expenses/settlement/suggestions`),
 };
 
 export default api;

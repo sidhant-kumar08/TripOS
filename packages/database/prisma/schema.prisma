@@ -35,9 +35,23 @@ model User {
   tripRoles TripRole[]
   expenses  Expense[] @relation("expensePayer")
   expenseSplits ExpenseSplit[]
+  expenseAuditLogs ExpenseAuditLog[]
   tasks     Task[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model Session {
@@ -239,9 +253,11 @@ model Expense {
   description String
   amount      Int @db.Integer // stored in cents
   currency    String @default("USD")
+  category    String @default("EXPENSE") // EXPENSE, LEND_BORROW, SETTLEMENT
   
   // Splits
-  splits    ExpenseSplit[]
+  splits      ExpenseSplit[]
+  auditLogs   ExpenseAuditLog[]
   
   // Idempotency
   idempotencyKey String? @unique
@@ -253,6 +269,25 @@ model Expense {
   @@index([tripId])
   @@index([payerId])
   @@map("expenses")
+}
+
+model ExpenseAuditLog {
+  id          String   @id @default(cuid())
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  action      String   // "CREATED", "UPDATED", "DELETED"
+  details     String?  // Human-readable summary of changes
+  changes     String?  // JSON stringified diff of old vs new values
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([expenseId])
+  @@index([userId])
+  @@map("expense_audit_logs")
 }
 
 model ExpenseSplit {
