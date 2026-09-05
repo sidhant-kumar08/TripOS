@@ -299,7 +299,7 @@ export class TripsService {
   /**
    * Declines and marks an invitation token used.
    */
-  async declineInvitation(token: string, userId: string) {
+  async declineInvitation(token: string, _userId?: string) {
     const invitation = await this.prisma.tripInvitation.findUnique({
       where: { token },
     });

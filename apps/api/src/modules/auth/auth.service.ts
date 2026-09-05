@@ -189,6 +189,10 @@ export class AuthService {
     });
   }
 
+  async verifyGoogleIdToken(dto: GoogleVerifyTokenDto) {
+    return this.verifyGoogleToken(dto);
+  }
+
   /**
    * Exchanges Facebook OAuth authorization code via Graph API and creates or links user account.
    */
