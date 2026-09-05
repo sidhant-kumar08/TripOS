@@ -34,16 +34,16 @@ const mergedEnv = {
   ...process.env,
 };
 
-const target = (mergedEnv.DB_TARGET || 'supabase').toLowerCase();
+const target = (mergedEnv.DB_TARGET || 'local').toLowerCase();
 const isLocal = target === 'local';
 
-let databaseUrl = isLocal
+let databaseUrl = process.env.DATABASE_URL || (isLocal
   ? mergedEnv.LOCAL_DATABASE_URL || mergedEnv.DATABASE_URL
-  : mergedEnv.SUPABASE_DATABASE_URL || mergedEnv.DATABASE_URL;
+  : mergedEnv.SUPABASE_DATABASE_URL || mergedEnv.DATABASE_URL);
 
-let directUrl = isLocal
+let directUrl = process.env.DIRECT_URL || (isLocal
   ? mergedEnv.LOCAL_DIRECT_URL || mergedEnv.LOCAL_DATABASE_URL || mergedEnv.DIRECT_URL
-  : mergedEnv.SUPABASE_DIRECT_URL || mergedEnv.DIRECT_URL;
+  : mergedEnv.SUPABASE_DIRECT_URL || mergedEnv.DIRECT_URL);
 
 if (!databaseUrl) {
   console.warn(`⚠️ [Prisma Switcher] No database URL found for target: "${target}". Falling back to default.`);
