@@ -41,5 +41,8 @@ lerna-debug.log*
 Docs/
 docs/
 
+# Customizations & MCP Configs
+.agents/
+
 # OS
 Thumbs.db
