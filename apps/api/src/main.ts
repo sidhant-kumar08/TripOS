@@ -59,10 +59,10 @@ async function bootstrap() {
   app.useGlobalFilters(app.get(AllExceptionsFilter));
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   const logger = app.get(Logger);
-  logger.log(`TripOS API running at http://localhost:${port}`, 'Bootstrap');
+  logger.log(`TripOS API running on port ${port}`, 'Bootstrap');
   logger.log(`Swagger Docs available at http://localhost:${port}/api/docs`, 'Bootstrap');
 }
 
