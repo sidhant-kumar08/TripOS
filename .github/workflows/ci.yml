@@ -28,17 +28,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
       
-      - name: Install pnpm
-        run: npm install -g pnpm
-      
       - name: Install dependencies
         run: pnpm install
+      
+      - name: Generate Prisma Client
+        run: pnpm db:generate
       
       - name: Run linting
         run: pnpm lint
@@ -51,3 +56,6 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tripos_test
           JWT_SECRET: test-secret
+          
+      - name: Run build
+        run: pnpm build

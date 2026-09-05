@@ -118,7 +118,7 @@ export class ExpensesService {
       await this.verifyTripMembership(tripId, dto.payerId);
     }
 
-    let newSplits = dto.splits;
+    const newSplits = dto.splits;
     if (newSplits) {
       const splitsTotal = newSplits.reduce((sum, s) => sum + s.amount, 0);
       if (splitsTotal !== newAmount) {
@@ -294,8 +294,8 @@ export class ExpensesService {
       orderBy: { createdAt: 'desc' },
     });
 
-    let auditLogMap = new Map<string, number>();
-    let createdByMap = new Map<string, { id: string; name: string | null; email: string }>();
+    const auditLogMap = new Map<string, number>();
+    const createdByMap = new Map<string, { id: string; name: string | null; email: string }>();
 
     try {
       const logs = await (this.prisma as any).expenseAuditLog.findMany({

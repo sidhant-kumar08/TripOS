@@ -12,6 +12,7 @@ dist/
 build/
 out/
 .next/
+*.tsbuildinfo
 
 # Misc
 .DS_Store

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '@/common/services/prisma.service';
 
@@ -17,6 +18,12 @@ describe('AuthService', () => {
               findUnique: jest.fn(),
               create: jest.fn(),
             },
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: {
+            sign: jest.fn().mockReturnValue('mock-jwt-token'),
           },
         },
       ],
