@@ -1,0 +1,13 @@
+node_modules
+.next
+dist
+build
+.turbo
+.git
+.agents
+Docs
+docs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

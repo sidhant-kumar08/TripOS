@@ -7,14 +7,14 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
 # Install pnpm
 RUN npm install -g pnpm@9
 
-# Copy all repository source files
+# Copy source files (node_modules excluded via .dockerignore)
 COPY . .
 
 # Install dependencies across monorepo
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile=false
 
 # Generate Prisma Client
-RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
+RUN pnpm --filter @tripos/database exec prisma generate --schema=packages/database/prisma/schema.prisma
 
 # Build API application
 RUN pnpm --filter @tripos/api build
@@ -24,4 +24,4 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "pnpm --filter @tripos/database exec prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss && node apps/api/dist/main.js"]
