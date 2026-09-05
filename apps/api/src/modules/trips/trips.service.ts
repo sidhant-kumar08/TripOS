@@ -13,7 +13,22 @@ export class TripsService {
   constructor(private prisma: PrismaService) {}
 
   async createTrip(userId: string, dto: CreateTripDto) {
-    if (dto.startDate && dto.endDate && new Date(dto.startDate) > new Date(dto.endDate)) {
+    if (!dto.startDate || !dto.endDate) {
+      throw new BadRequestException('Start date and end date are required');
+    }
+
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+
+    // Ensure start date is not before start of today (local/UTC day boundary)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (start < today) {
+      throw new BadRequestException('Start date cannot be in the past');
+    }
+
+    if (start > end) {
       throw new BadRequestException('End date cannot be earlier than start date');
     }
 
@@ -23,8 +38,8 @@ export class TripsService {
         name: dto.name,
         description: dto.description,
         destination: dto.destination,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        startDate: start,
+        endDate: end,
         creatorId: userId,
         members: {
           create: {

@@ -8,7 +8,10 @@ export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
   async createExpense(tripId: string, userId: string, dto: CreateExpenseDto) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
+    if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+      throw new ForbiddenException('Guests cannot add expenses');
+    }
 
     const payerId = dto.payerId || userId;
     await this.verifyTripMembership(tripId, payerId);
@@ -90,7 +93,7 @@ export class ExpensesService {
   }
 
   async updateExpense(tripId: string, expenseId: string, userId: string, dto: UpdateExpenseDto) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
 
     const existingExpense = await this.prisma.expense.findUnique({
       where: { id: expenseId },
@@ -106,6 +109,15 @@ export class ExpensesService {
 
     if (!existingExpense || existingExpense.tripId !== tripId) {
       throw new NotFoundException('Expense not found');
+    }
+
+    const isPayer = existingExpense.payerId === userId;
+    const isOwnerOrAdmin = ['OWNER', 'ADMIN'].includes(membership.role);
+
+    if (!isPayer && !isOwnerOrAdmin) {
+      throw new ForbiddenException(
+        'Only the payer, trip owner, or admins can edit this expense',
+      );
     }
 
     const newAmount = dto.amount !== undefined ? Math.round(dto.amount) : existingExpense.amount;
@@ -339,7 +351,7 @@ export class ExpensesService {
   }
 
   async deleteExpense(tripId: string, expenseId: string, userId: string) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
 
     const expense = await this.prisma.expense.findUnique({
       where: { id: expenseId },
@@ -349,18 +361,9 @@ export class ExpensesService {
       throw new NotFoundException('Expense not found');
     }
 
-    const tripRole = await this.prisma.tripRole.findUnique({
-      where: {
-        tripId_userId: {
-          tripId,
-          userId,
-        },
-      },
-    });
-
-    const isOwner = tripRole?.role === 'OWNER';
-    if (expense.payerId !== userId && !isOwner) {
-      throw new ForbiddenException('Only the payer or trip owner can delete an expense');
+    const isOwnerOrAdmin = ['OWNER', 'ADMIN'].includes(membership.role);
+    if (expense.payerId !== userId && !isOwnerOrAdmin) {
+      throw new ForbiddenException('Only the payer, trip owner, or admins can delete an expense');
     }
 
     await this.prisma.expense.delete({
@@ -515,6 +518,8 @@ export class ExpensesService {
     if (!membership) {
       throw new ForbiddenException('You are not a member of this trip');
     }
+
+    return membership;
   }
 
   private formatExpense(expense: any) {

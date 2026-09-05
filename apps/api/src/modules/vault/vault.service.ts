@@ -32,7 +32,10 @@ export class VaultService {
   }
 
   async uploadFile(tripId: string, userId: string, dto: UploadFileDto, fileBuffer?: Buffer) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
+    if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+      throw new ForbiddenException('Guests cannot upload files to the vault');
+    }
 
     // Get or create vault
     const vault = await this.getOrCreateVault(tripId, userId);
@@ -138,7 +141,12 @@ export class VaultService {
   }
 
   async deleteFile(tripId: string, fileId: string, userId: string) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
+    if (!['OWNER', 'ADMIN'].includes(membership.role)) {
+      throw new ForbiddenException(
+        'Only trip owners and admins can delete files from the vault',
+      );
+    }
 
     const vault = await this.prisma.tripVault.findUnique({
       where: { tripId },
@@ -170,7 +178,10 @@ export class VaultService {
   }
 
   async updateFile(tripId: string, fileId: string, userId: string, dto: UpdateFileDto) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
+    if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+      throw new ForbiddenException('Guests cannot edit files in the vault');
+    }
 
     const vault = await this.prisma.tripVault.findUnique({
       where: { tripId },
@@ -213,6 +224,8 @@ export class VaultService {
     if (!membership) {
       throw new ForbiddenException('You are not a member of this trip');
     }
+
+    return membership;
   }
 
   private formatFile(file: any, downloadUrl?: string | null) {

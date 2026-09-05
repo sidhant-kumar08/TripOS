@@ -7,8 +7,8 @@ export class ActivitiesService {
   constructor(private prisma: PrismaService) {}
 
   async createActivity(tripId: string, userId: string, dto: CreateActivityDto) {
-    // Verify user is a member of the trip
-    await this.verifyTripMembership(tripId, userId);
+    // Verify user is at least a regular member (not GUEST)
+    await this.verifyTripRole(tripId, userId, ['OWNER', 'ADMIN', 'MEMBER']);
 
     // Validate time
     const startTime = new Date(dto.startTime);
@@ -83,7 +83,8 @@ export class ActivitiesService {
     userId: string,
     dto: UpdateActivityDto,
   ) {
-    await this.verifyTripMembership(tripId, userId);
+    // Only trip OWNER and ADMIN can modify itinerary activities
+    await this.verifyTripRole(tripId, userId, ['OWNER', 'ADMIN']);
 
     const activity = await this.prisma.activity.findUnique({
       where: { id: activityId },
@@ -119,7 +120,8 @@ export class ActivitiesService {
   }
 
   async deleteActivity(tripId: string, activityId: string, userId: string) {
-    await this.verifyTripMembership(tripId, userId);
+    // Only trip OWNER and ADMIN can delete itinerary activities
+    await this.verifyTripRole(tripId, userId, ['OWNER', 'ADMIN']);
 
     const activity = await this.prisma.activity.findUnique({
       where: { id: activityId },
@@ -193,6 +195,24 @@ export class ActivitiesService {
     if (!membership) {
       throw new ForbiddenException('You are not a member of this trip');
     }
+
+    return membership;
+  }
+
+  private async verifyTripRole(
+    tripId: string,
+    userId: string,
+    allowedRoles: string[] = ['OWNER', 'ADMIN'],
+  ) {
+    const membership = await this.verifyTripMembership(tripId, userId);
+
+    if (!allowedRoles.includes(membership.role)) {
+      throw new ForbiddenException(
+        'Only trip owners and admins can perform this action',
+      );
+    }
+
+    return membership;
   }
 
   private formatActivity(activity: any) {

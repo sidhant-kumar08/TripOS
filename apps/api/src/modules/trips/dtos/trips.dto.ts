@@ -13,12 +13,10 @@ export class CreateTripDto {
   destination?: string;
 
   @IsDateString()
-  @IsOptional()
-  startDate?: string;
+  startDate!: string;
 
   @IsDateString()
-  @IsOptional()
-  endDate?: string;
+  endDate!: string;
 }
 
 export class InviteMemberDto {

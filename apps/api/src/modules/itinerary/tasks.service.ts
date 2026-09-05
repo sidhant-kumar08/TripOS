@@ -7,7 +7,10 @@ export class TasksService {
   constructor(private prisma: PrismaService) {}
 
   async createTask(tripId: string, userId: string, dto: CreateTaskDto) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
+    if (!['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+      throw new ForbiddenException('Guests cannot create tasks');
+    }
 
     const task = await this.prisma.task.create({
       data: {
@@ -78,7 +81,7 @@ export class TasksService {
     userId: string,
     dto: UpdateTaskDto,
   ) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
 
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -86,6 +89,22 @@ export class TasksService {
 
     if (!task || task.tripId !== tripId) {
       throw new NotFoundException('Task not found');
+    }
+
+    const isCreator = task.creatorId === userId;
+    const isOwnerOrAdmin = ['OWNER', 'ADMIN'].includes(membership.role);
+
+    // If modifying core task details (title, description, assignedTo, dueDate), must be creator or admin/owner
+    const isModifyingDetails =
+      dto.title !== undefined ||
+      dto.description !== undefined ||
+      dto.assignedTo !== undefined ||
+      dto.dueDate !== undefined;
+
+    if (isModifyingDetails && !isCreator && !isOwnerOrAdmin) {
+      throw new ForbiddenException(
+        'Only the task creator, trip owner, or admins can edit task details',
+      );
     }
 
     const updated = await this.prisma.task.update({
@@ -106,7 +125,7 @@ export class TasksService {
   }
 
   async deleteTask(tripId: string, taskId: string, userId: string) {
-    await this.verifyTripMembership(tripId, userId);
+    const membership = await this.verifyTripMembership(tripId, userId);
 
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -114,6 +133,15 @@ export class TasksService {
 
     if (!task || task.tripId !== tripId) {
       throw new NotFoundException('Task not found');
+    }
+
+    const isCreator = task.creatorId === userId;
+    const isOwnerOrAdmin = ['OWNER', 'ADMIN'].includes(membership.role);
+
+    if (!isCreator && !isOwnerOrAdmin) {
+      throw new ForbiddenException(
+        'Only the task creator, trip owner, or admins can delete this task',
+      );
     }
 
     await this.prisma.task.delete({
@@ -136,6 +164,8 @@ export class TasksService {
     if (!membership) {
       throw new ForbiddenException('You are not a member of this trip');
     }
+
+    return membership;
   }
 
   private formatTask(task: any) {

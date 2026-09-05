@@ -137,7 +137,18 @@ function DashboardContent() {
     e.preventDefault();
     if (!tripName.trim()) return;
 
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+    if (!startDate || !endDate) {
+      setErrorMessage('Please select both a start date and an end date');
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (startDate < todayStr) {
+      setErrorMessage('Start date cannot be in the past');
+      return;
+    }
+
+    if (startDate > endDate) {
       setErrorMessage('End date cannot be earlier than start date');
       return;
     }
@@ -149,8 +160,8 @@ function DashboardContent() {
         name: tripName.trim(),
         destination: destination.trim() || undefined,
         description: description.trim() || undefined,
-        startDate: startDate ? new Date(startDate).toISOString() : undefined,
-        endDate: endDate ? new Date(endDate).toISOString() : undefined,
+        startDate: new Date(startDate).toISOString(),
+        endDate: new Date(endDate).toISOString(),
       });
 
       setTrips(prev => [response.data, ...prev]);
@@ -483,15 +494,19 @@ function DashboardContent() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
               type="date"
-              label="Start Date"
+              label="Start Date *"
               value={startDate}
+              min={new Date().toISOString().split('T')[0]}
               onChange={(e) => setStartDate(e.target.value)}
+              required
             />
             <Input
               type="date"
-              label="End Date"
+              label="End Date *"
               value={endDate}
+              min={startDate || new Date().toISOString().split('T')[0]}
               onChange={(e) => setEndDate(e.target.value)}
+              required
             />
           </div>
 
