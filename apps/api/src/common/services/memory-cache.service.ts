@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 
 interface CacheEntry<T> {
   value: T;
@@ -7,7 +7,7 @@ interface CacheEntry<T> {
 
 @Injectable()
 export class MemoryCacheService implements OnModuleDestroy {
-  private readonly logger = new Logger(MemoryCacheService.name);
+
   private cache = new Map<string, CacheEntry<any>>();
   private cleanupInterval: NodeJS.Timeout;
 

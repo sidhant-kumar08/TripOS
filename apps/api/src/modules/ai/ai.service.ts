@@ -133,6 +133,9 @@ export class AIService {
       .map((m) => `- ${m.user.name || m.user.email.split('@')[0]} (email: ${m.user.email})`)
       .join('\n');
 
+    // Build prompt string for AI providers
+    const prompt = `Trip members:\n${memberListContext}\n\nUser message: ${text}`;
+
     // 2. Deterministic AI Fast-Path (< 5ms)
     // For standard, unambiguous spending phrases, regex heuristics are faster and 100% accurate
     let raw: RawExpenseExtraction | null = null;
