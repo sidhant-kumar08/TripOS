@@ -22,6 +22,8 @@
 ## 🌟 Key Features
 
 - 👥 **Group Workspaces & Roles**: Role-based permissions (Organizer, Editor, Viewer) with secure tokenized invite links.
+- 🤖 **AI Operational Layer**: Conversational expense & task parsing with deep Indian linguistic support (English, Hindi in Latin script, Hinglish like *"5k"*, *"2 hazar"*, *"split except Rahul"*), zero-trust member resolution, and Google Gemini Flash.
+- 🚨 **Trip Command Center**: Real-time operational layer featuring live departure countdowns, contextual weather forecasts, offline Emergency SOS protocols, and travel alerts.
 - 📅 **Dynamic Itinerary & Timelines**: Day-by-day scheduling with activity categories, locations, times, and member assignment.
 - 💸 **Fair Expense Splitting & Debt Minimization**: Real-time multi-currency expense ledger, customizable split ratios, and automated settlement suggestions.
 - 🗄️ **Encrypted Trip Vault**: Store e-tickets, hotel booking PDFs, and vouchers with in-app document & image preview powered by **Supabase Storage**.
