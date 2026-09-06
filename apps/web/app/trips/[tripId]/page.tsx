@@ -25,6 +25,7 @@ import {
   Sparkles,
   ExternalLink,
   CheckSquare,
+  Bot,
 } from 'lucide-react';
 import { ProtectedRoute } from '@/lib/protected-route';
 import { commandCenterApi, tripsApi, tasksApi } from '@/lib/api';
@@ -34,6 +35,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { formatDate, formatCurrency, getInitials } from '@/lib/utils';
+import { AIBriefingBanner } from '@/components/ai/ai-briefing-banner';
+import { AskTripOSModal } from '@/components/ai/ask-tripos-modal';
 
 export default function TripDetailPage() {
   return (
@@ -50,6 +53,7 @@ function TripCommandCenterContent() {
   const [overview, setOverview] = React.useState<any | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [showReadinessDetails, setShowReadinessDetails] = React.useState(false);
+  const [isAskModalOpen, setIsAskModalOpen] = React.useState(false);
 
   // Invite Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = React.useState(false);
@@ -169,13 +173,26 @@ function TripCommandCenterContent() {
         { label: trip.name },
       ]}
       actions={
-        <Button variant="default" onClick={() => setIsInviteModalOpen(true)} className="gap-2 shadow-sm">
-          <UserPlus className="h-4 w-4" />
-          <span>Invite Squad</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsAskModalOpen(true)}
+            className="gap-2 border-indigo-500/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-sm"
+          >
+            <Bot className="h-4 w-4 text-indigo-500" />
+            <span>Ask TripOS</span>
+          </Button>
+          <Button variant="default" onClick={() => setIsInviteModalOpen(true)} className="gap-2 shadow-sm">
+            <UserPlus className="h-4 w-4" />
+            <span>Invite Squad</span>
+          </Button>
+        </div>
       }
     >
       <div className="space-y-6 max-w-5xl mx-auto">
+        {/* Natural Language AI Briefing */}
+        <AIBriefingBanner tripId={tripId} onAskClick={() => setIsAskModalOpen(true)} />
+
         {/* ================= 1. TRIP HEADER & CONTEXT BAR ================= */}
         <div className="relative overflow-hidden rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-5 sm:p-7 text-white shadow-xl">
           {/* Subtle background glow */}
@@ -657,6 +674,13 @@ function TripCommandCenterContent() {
           )}
         </div>
       </Modal>
+
+      {/* Ask TripOS Contextual AI Modal */}
+      <AskTripOSModal
+        tripId={tripId}
+        isOpen={isAskModalOpen}
+        onClose={() => setIsAskModalOpen(false)}
+      />
     </PageShell>
   );
 }

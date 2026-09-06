@@ -32,6 +32,7 @@ import { StatCard } from '@/components/shared/stat-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils';
 import { expensesApi } from '@/lib/api';
+import { AIQuickExpenseBar } from '@/components/ai/ai-quick-expense-bar';
 
 interface ExpenseSplit {
   userId: string;
@@ -437,6 +438,23 @@ export default function ExpensesPage() {
           variant={settlements.length === 0 ? 'success' : 'warning'}
         />
       </div>
+
+      {/* Natural Language AI Expense Parser */}
+      <AIQuickExpenseBar
+        tripId={tripId}
+        onExpenseCreated={fetchData}
+        onOpenEditInForm={(prefill) => {
+          resetForm();
+          setIsEditing(false);
+          setCategory('EXPENSE');
+          setDescription(prefill.description);
+          setAmount(prefill.amount);
+          setCurrency(prefill.currency);
+          if (prefill.payerId) setPayerId(prefill.payerId);
+          if (prefill.participantIds.length > 0) setSelectedParticipantIds(prefill.participantIds);
+          setIsModalOpen(true);
+        }}
+      />
 
       {/* Segmented Navigation Switcher */}
       <div className="mb-6 flex overflow-x-auto scrollbar-none rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800/80 w-full sm:w-fit gap-1">

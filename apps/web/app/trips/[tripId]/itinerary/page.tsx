@@ -25,6 +25,7 @@ import { Modal } from '@/components/ui/modal';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatDate } from '@/lib/utils';
 import { itineraryApi, tasksApi, tripsApi } from '@/lib/api';
+import { AIQuickTaskBar } from '@/components/ai/ai-quick-task-bar';
 
 interface Activity {
   id: string;
@@ -501,6 +502,8 @@ export default function ItineraryPage() {
       {/* ================= TASKS & COMMITMENTS TAB ================= */}
       {activeTab === 'tasks' && (
         <div className="space-y-6">
+          <AIQuickTaskBar tripId={tripId} onTaskCreated={fetchData} />
+
           {/* Filter Pills */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">

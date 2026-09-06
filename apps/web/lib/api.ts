@@ -113,4 +113,16 @@ export const commandCenterApi = {
   getOverview: (tripId: string) => api.get(`/trips/${tripId}/overview`),
 };
 
+export const aiApi = {
+  parseExpense: (tripId: string, text: string) =>
+    api.post(`/trips/${tripId}/ai/parse-expense`, { text }),
+  parseTask: (tripId: string, text: string) =>
+    api.post(`/trips/${tripId}/ai/parse-task`, { text }),
+  ask: (tripId: string, question: string) =>
+    api.post(`/trips/${tripId}/ai/ask`, { question }),
+  getBriefing: (tripId: string) =>
+    api.get(`/trips/${tripId}/ai/briefing`),
+};
+
 export default api;
+
