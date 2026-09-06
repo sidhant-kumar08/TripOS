@@ -91,7 +91,22 @@ export class AIService {
   }
 
   /**
-   * Natural Language Expense Parser with Indian Context & Entity Resolution.
+   * Interprets natural language conversational text into a structured expense proposal.
+   *
+   * Core Guarantees:
+   * 1. Multi-lingual Interpretation: Handles English, Hindi in Latin script, Hinglish,
+   *    Indian currency amounts (5k, 2 hazar, ₹5,000), and pronoun variations (maine, me).
+   * 2. Entity Resolution: Deterministically resolves extracted alias names to real TripRole
+   *    members authorized on the trip.
+   * 3. Safety Pipeline: If amounts are zero/missing or critical entities cannot be resolved,
+   *    flags `needsClarification = true` with a clear explanation instead of guessing.
+   * 4. Zero Autonomous Mutations: Never writes to the database. Returns a proposal for
+   *    user review and explicit confirmation.
+   *
+   * @param tripId The unique identifier of the active trip.
+   * @param userId The ID of the authenticated requesting user.
+   * @param text The conversational input string from the user.
+   * @returns An `ExpenseProposal` containing resolved members, amount, currency, and validation state.
    */
   async parseExpense(tripId: string, userId: string, text: string): Promise<ExpenseProposal> {
     this.checkRateLimit(userId);
@@ -208,7 +223,20 @@ export class AIService {
   }
 
   /**
-   * Natural Language Task Creator with Indian Context & Due Date Resolution.
+   * Interprets conversational task input and returns a validated task proposal.
+   *
+   * Core Guarantees:
+   * 1. Conversational Dates: Resolves colloquial expressions (e.g. 'kal', 'parso', 'next Friday')
+   *    into concrete ISO dates relative to today.
+   * 2. Intelligent Delegation: Detects Hindi postposition assignment markers ('Priya ko bol dena')
+   *    and matches them against authorized trip members.
+   * 3. Priority Inference: Infers urgency ('urgent', 'abhi', 'asap' -> URGENT; 'kal' -> HIGH).
+   * 4. Zero Direct Writes: User must review and click 'Confirm & Create Task'.
+   *
+   * @param tripId The trip ID.
+   * @param userId Authenticated user requesting the task creation.
+   * @param text Conversational input text.
+   * @returns `TaskProposal` with title, resolved assignee, due date, and priority.
    */
   async parseTask(tripId: string, userId: string, text: string): Promise<TaskProposal> {
     this.checkRateLimit(userId);
@@ -268,7 +296,18 @@ export class AIService {
   }
 
   /**
-   * Ask TripOS: Contextual, grounded Q&A answering strictly from authorized trip state.
+   * Grounded Contextual Q&A ("Ask TripOS").
+   *
+   * Core Guarantees:
+   * 1. Privacy & Boundary: Feeds only minimal authorized data (tasks, balances, readiness)
+   *    associated with the requesting member. Never leaks unpermitted records.
+   * 2. Grounded Answers: Prevents AI hallucination by answering strictly from DB state.
+   * 3. Actionable Navigation: Emits deep-link action pills allowing 1-tap jumps to related tabs.
+   *
+   * @param tripId The trip ID.
+   * @param userId The authenticated user ID.
+   * @param question The user's query in English, Hindi, or Hinglish.
+   * @returns `AskTripOSResponse` with concise natural language answer and deep-link actions.
    */
   async askTripOS(tripId: string, userId: string, question: string): Promise<AskTripOSResponse> {
     this.checkRateLimit(userId);
@@ -350,7 +389,17 @@ User Net Balance: ${(netBalanceMinor / 100).toFixed(2)} INR (${netBalanceMinor >
   }
 
   /**
-   * Command Center AI Executive Briefing.
+   * Generates a high-level operational briefing for the Command Center overview.
+   *
+   * Synthesizes:
+   * 1. Overall trip health and member readiness.
+   * 2. Key pending attention items requiring immediate action.
+   * 3. Group financial and expenditure progress.
+   * 4. Single highest-impact next recommendation.
+   *
+   * @param tripId The trip ID.
+   * @param userId The requesting user ID.
+   * @returns `TripBriefingResponse` conforming to strict executive schema.
    */
   async getBriefing(tripId: string, userId: string): Promise<TripBriefingResponse> {
     const membership = await this.prisma.tripRole.findUnique({
@@ -397,7 +446,19 @@ Total Expenses: ${totalSpent} INR`;
   }
 
   /**
-   * Fuzzy and alias-aware member resolver.
+   * Deterministic Entity Resolver.
+   * Maps colloquial aliases, first-person pronouns, and fuzzy substrings to real database members.
+   *
+   * Resolution Rules:
+   * 1. Self pronouns ('me', 'i', 'myself', 'maine', 'mera', 'meri') map directly to the requesting user.
+   * 2. Exact match on member's full name or email username prefix (e.g. 'Rahul' -> 'Rahul Sharma').
+   * 3. Substring / partial match when unique with a confidence score of 0.8.
+   * 4. Returns null if ambiguous or unresolvable to trigger clarification.
+   *
+   * @param alias The raw alias or name string extracted by the model.
+   * @param members Authorized list of members on the trip.
+   * @param requestingMember The authenticated member invoking the endpoint.
+   * @returns `ResolvedMember` if matched, or `null`.
    */
   private resolveMember(
     alias: string | undefined,

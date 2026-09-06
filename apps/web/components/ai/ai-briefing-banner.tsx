@@ -12,6 +12,17 @@ interface TripBriefing {
   generatedAt: string;
 }
 
+/**
+ * Component: AIBriefingBanner
+ *
+ * Design Principle (Doc 12 Section 14):
+ * - Executive Morning Briefing: Positioned at the top of the Command Center overview.
+ *   Provides a calm, 2-to-3 sentence synthesis of trip readiness, blockers, financial state,
+ *   and recommended next action.
+ * - Non-blocking Progression: Renders gracefully with smooth loading states; core screens
+ *   never crash or freeze if AI is temporarily unavailable.
+ * - Interactive Triggers: Includes a 1-tap "Ask TripOS" launcher and on-demand refresh.
+ */
 interface AIBriefingBannerProps {
   tripId: string;
   onAskClick?: () => void;

@@ -8,28 +8,49 @@ import { Injectable } from '@nestjs/common';
 import { AIProvider, AIOptions } from './ai-provider.interface';
 import { RawExpenseExtraction, RawTaskExtraction } from '../ai.types';
 
+/**
+ * MockAIProvider serves as the deterministic, zero-network fallback and test engine.
+ *
+ * Core Architectural Roles:
+ * 1. Hermetic Testing: Allows Jest tests to run fully offline without external API keys or rate limits.
+ * 2. Zero-Cost Fallback: When the user's daily free Gemini quota is exhausted, the system automatically
+ *    routes through here instead of generating unexpected credit card bills or throwing 500 crashes.
+ * 3. Deterministic Parsing: Uses targeted regular expressions to extract Indian amounts (5k, 2 hazar),
+ *    postposition payers ('Rahul ne', 'maine'), exclusion targets ('except Rahul'), and conversational dates ('kal').
+ */
 @Injectable()
 export class MockAIProvider implements AIProvider {
   readonly name = 'mock';
 
+  /**
+   * The mock provider is always considered available as it relies solely on local CPU memory.
+   */
   isAvailable(): boolean {
     return true;
   }
 
+  /**
+   * Generates structured proposals by matching the expected schema properties
+   * and delegating to the appropriate deterministic extraction heuristic.
+   *
+   * @param prompt The user text and authorized contextual member list.
+   * @param schema The target JSON schema defining whether an expense, task, or briefing is requested.
+   * @returns Deterministically extracted proposal matching the requested schema.
+   */
   async generateStructured<T>(prompt: string, schema: Record<string, any>, _options?: AIOptions): Promise<T> {
-    // 1. Detect Expense Intent
+    // 1. Detect Expense Intent: Schema requires amountMinor
     if (schema.properties?.amountMinor) {
       const parsedExpense = this.heuristicParseExpense(prompt);
       return parsedExpense as unknown as T;
     }
 
-    // 2. Detect Task Intent
+    // 2. Detect Task Intent: Schema requires title and priority
     if (schema.properties?.title && schema.properties?.priority) {
       const parsedTask = this.heuristicParseTask(prompt);
       return parsedTask as unknown as T;
     }
 
-    // 3. Detect Briefing Intent
+    // 3. Detect Briefing Intent: Schema requires summary and readinessNote
     if (schema.properties?.summary && schema.properties?.readinessNote) {
       return {
         summary: 'Trip preparation is actively advancing. Critical tasks and expenses are tracking on schedule.',
@@ -43,6 +64,9 @@ export class MockAIProvider implements AIProvider {
     throw new Error('Unsupported schema in MockAIProvider');
   }
 
+  /**
+   * Generates grounded contextual answers based on keywords detected in the user query.
+   */
   async generateText(prompt: string, _options?: AIOptions): Promise<string> {
     const lower = prompt.toLowerCase();
     if (lower.includes('owe') || lower.includes('balance') || lower.includes('money')) {

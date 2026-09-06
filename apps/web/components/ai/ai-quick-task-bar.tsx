@@ -25,6 +25,16 @@ interface TaskProposal {
   clarificationMessage?: string;
 }
 
+/**
+ * Component: AIQuickTaskBar
+ *
+ * Design Principle (Doc 12):
+ * - Conversational Task Capture: Allows trip members to quickly turn WhatsApp-style messages
+ *   (e.g., "Priya ko cab book krne bol dena kal shaam tak", "kal 7 bje airport jana h") into tasks.
+ * - Temporal & Delegation Intelligence: Resolves conversational dates ("kal", "parso") into ISO dates
+ *   and maps delegation postpositions ("ko bol dena") directly to authorized trip members.
+ * - Human Review Card: Shows the extracted title, assignee, and priority for explicit user confirmation.
+ */
 interface AIQuickTaskBarProps {
   tripId: string;
   onTaskCreated: () => void;

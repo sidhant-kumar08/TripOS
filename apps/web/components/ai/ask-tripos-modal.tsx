@@ -4,6 +4,17 @@ import { useRouter } from 'next/navigation';
 import { aiApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
+/**
+ * Component: AskTripOSModal
+ *
+ * Design Principle (Doc 12 Section 14):
+ * - Contextual Assistance over Monolithic Chatbots: Avoids occupying permanent screen space
+ *   with a full-page bot. Instead, opens on-demand from the Command Center or trip layout.
+ * - Grounded Trip Records: Synthesizes responses strictly from authorized DB queries (readiness score,
+ *   pending tasks, balance records) to eliminate hallucination.
+ * - Quick Action Chips: Provides 1-tap prompts for common questions ("What do I need to do?", "Who owes me money?").
+ * - Interactive Navigation: Accompanies responses with deep-link action pills jumping directly to relevant modules.
+ */
 interface AskTripOSModalProps {
   tripId: string;
   isOpen: boolean;

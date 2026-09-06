@@ -27,6 +27,17 @@ interface ExpenseProposal {
   unresolvedAliases: string[];
 }
 
+/**
+ * Component: AIQuickExpenseBar
+ *
+ * Design Principle (Doc 12):
+ * - Simple, Calm, Actionable: Provides a frictionless natural language input for conversational
+ *   Indian expense logging (Hindi, Hinglish, Latin script, e.g. "Rahul ne hotel ke 5k diye").
+ * - Human-in-the-loop Review: Presents an interactive Proposal Review Card displaying resolved
+ *   payer, currency amount, and split members with badges.
+ * - Zero Autonomous Mutations: Never executes silently. The user explicitly confirms or can
+ *   choose "Edit in Form" to inspect or adjust fields before persisting.
+ */
 interface AIQuickExpenseBarProps {
   tripId: string;
   onExpenseCreated: () => void;
