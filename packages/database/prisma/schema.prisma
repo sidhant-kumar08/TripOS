@@ -220,6 +220,7 @@ model Task {
   
   // Status
   status    TaskStatusEnum @default(OPEN)
+  priority  String?        @default("MEDIUM")
   dueDate   DateTime?
   
   // Timestamps
@@ -306,6 +307,7 @@ model ExpenseSplit {
   createdAt DateTime @default(now())
   
   @@unique([expenseId, userId])
+  @@index([userId])
   @@map("expense_splits")
 }
 

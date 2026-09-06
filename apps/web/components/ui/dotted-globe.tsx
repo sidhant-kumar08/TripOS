@@ -191,7 +191,7 @@ export function DottedGlobe({ className = '', size = 560 }: DottedGlobeProps) {
             key={`lon-${idx}`}
             cx="250"
             cy="250"
-            rx={200 * Math.cos((angle * Math.PI) / 180)}
+            rx={Math.abs(200 * Math.cos((angle * Math.PI) / 180))}
             ry="200"
             fill="none"
             stroke="#ffffff"

@@ -154,32 +154,25 @@ export class ActivitiesService {
       throw new NotFoundException('Activity not found');
     }
 
-    const participant = await this.prisma.activityParticipant.findUnique({
+    const updated = await this.prisma.activityParticipant.upsert({
       where: {
         activityId_userId: {
           activityId,
           userId,
         },
       },
-    });
-
-    if (!participant) {
-      throw new NotFoundException('Participant not found');
-    }
-
-    const updated = await this.prisma.activityParticipant.update({
-      where: {
-        activityId_userId: {
-          activityId,
-          userId,
-        },
+      update: {
+        status: dto.status as any,
       },
-      data: {
+      create: {
+        tripId,
+        activityId,
+        userId,
         status: dto.status as any,
       },
     });
 
-    return updated;
+    return { success: true, participant: updated };
   }
 
   private async verifyTripMembership(tripId: string, userId: string) {

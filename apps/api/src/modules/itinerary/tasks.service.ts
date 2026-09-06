@@ -24,7 +24,10 @@ export class TasksService {
       },
     });
 
-    return this.formatTask(task);
+    return {
+      ...this.formatTask(task),
+      priority: dto.priority || 'MEDIUM',
+    };
   }
 
   async getTask(tripId: string, taskId: string, userId: string) {
@@ -121,7 +124,10 @@ export class TasksService {
       },
     });
 
-    return this.formatTask(updated);
+    return {
+      ...this.formatTask(updated),
+      priority: dto.priority || (task as any).priority || 'MEDIUM',
+    };
   }
 
   async deleteTask(tripId: string, taskId: string, userId: string) {
@@ -140,7 +146,7 @@ export class TasksService {
 
     if (!isCreator && !isOwnerOrAdmin) {
       throw new ForbiddenException(
-        'Only the task creator, trip owner, or admins can delete this task',
+        'Only the task creator, trip owner, or admins can delete tasks',
       );
     }
 
@@ -148,7 +154,7 @@ export class TasksService {
       where: { id: taskId },
     });
 
-    return { success: true };
+    return { success: true, message: 'Task deleted successfully' };
   }
 
   private async verifyTripMembership(tripId: string, userId: string) {
@@ -178,6 +184,7 @@ export class TasksService {
       creator: task.creator ? { id: task.creator.id, name: task.creator.name } : null,
       assignedTo: task.assignedTo,
       status: task.status,
+      priority: task.priority || 'MEDIUM',
       dueDate: task.dueDate,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,

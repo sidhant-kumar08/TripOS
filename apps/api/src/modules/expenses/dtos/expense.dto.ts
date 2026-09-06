@@ -1,7 +1,12 @@
-import { IsString, IsNumber, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsInt, Min, IsArray, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ExpenseSplitInput {
+  @IsString()
   userId!: string;
+
+  @IsInt()
+  @Min(0, { message: 'Split amount must not be negative' })
   amount!: number; // in cents
 }
 
@@ -9,7 +14,8 @@ export class CreateExpenseDto {
   @IsString()
   description!: string;
 
-  @IsNumber()
+  @IsInt()
+  @Min(1, { message: 'Expense amount must be at least 1 minor unit / paisa' })
   amount!: number; // in cents
 
   @IsString()
@@ -25,6 +31,8 @@ export class CreateExpenseDto {
   payerId?: string;
 
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExpenseSplitInput)
   splits!: ExpenseSplitInput[];
 }
 
@@ -33,7 +41,8 @@ export class UpdateExpenseDto {
   @IsOptional()
   description?: string;
 
-  @IsNumber()
+  @IsInt()
+  @Min(1, { message: 'Expense amount must be at least 1 minor unit / paisa' })
   @IsOptional()
   amount?: number;
 
@@ -50,6 +59,8 @@ export class UpdateExpenseDto {
   payerId?: string;
 
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExpenseSplitInput)
   @IsOptional()
   splits?: ExpenseSplitInput[];
 

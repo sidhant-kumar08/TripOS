@@ -3,7 +3,7 @@
  * @description NestJS Controller exposing authenticated TripOS AI endpoints.
  */
 
-import { Controller, Post, Get, Param, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MaxLength, IsOptional } from 'class-validator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
@@ -47,6 +47,7 @@ export class AIController {
    * Parses conversational expense input (English, Hindi, Hinglish) into an actionable proposal.
    */
   @Post('parse-expense')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Parse conversational expense text into an actionable proposal',
     description: 'Interprets colloquial amounts (5k, 2 hazar), payers (Rahul ne, maine), and exclusions (except Rahul), resolving against real trip members.',
@@ -66,6 +67,7 @@ export class AIController {
    * Parses conversational task descriptions with dates and assignments into an actionable proposal.
    */
   @Post('parse-task')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Parse conversational task text into an actionable proposal',
     description: 'Extracts title, assignee (Priya ko bol dena), conversational dates (kal 7 bje), and priority urgency.',
@@ -84,6 +86,7 @@ export class AIController {
    * Answers user inquiries strictly grounded in authorized trip records.
    */
   @Post('ask')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Ask TripOS contextual questions grounded in authorized trip state',
     description: 'Answers questions about pending tasks, balances, and readiness without leaking unauthorized data.',
@@ -119,6 +122,7 @@ export class AIController {
    * Single unified conversational chat endpoint for trip-scoped AI interactions.
    */
   @Post('chat')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unified conversational AI assistant for trip actions' })
   async tripChat(
     @Param('tripId') tripId: string,
@@ -148,6 +152,7 @@ export class GlobalAIController {
   constructor(private readonly aiService: AIService) {}
 
   @Post('chat')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unified conversational AI copilot entry point' })
   async chat(@Body() dto: GlobalChatDto, @Req() req: any) {
     return this.aiService.processUnifiedChat(req.user.sub, dto.text, dto.tripId);

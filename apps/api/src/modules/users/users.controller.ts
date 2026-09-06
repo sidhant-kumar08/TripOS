@@ -59,6 +59,16 @@ export class UsersController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file type. Only JPEG, PNG, WEBP, and GIF images are allowed.');
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('File is too large. Avatar images must be under 5MB.');
+    }
+
     return this.usersService.uploadAvatarFile(
       req.user.sub,
       file.buffer,

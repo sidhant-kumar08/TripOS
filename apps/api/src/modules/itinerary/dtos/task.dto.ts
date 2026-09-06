@@ -12,6 +12,10 @@ export class CreateTaskDto {
   @IsOptional()
   assignedTo?: string;
 
+  @IsString()
+  @IsOptional()
+  priority?: string;
+
   @IsDateString()
   @IsOptional()
   dueDate?: string;
@@ -29,6 +33,10 @@ export class UpdateTaskDto {
   @IsString()
   @IsOptional()
   status?: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+  @IsString()
+  @IsOptional()
+  priority?: string;
 
   @IsString()
   @IsOptional()

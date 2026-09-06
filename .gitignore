@@ -39,12 +39,16 @@ lerna-debug.log*
 .turbo
 
 # Documentation (Internal docs excluded from git)
-Docs/
-docs/
+Docs/*
+docs/*
+!docs/AUDIT_REPORT.md
 
 # Customizations & MCP Configs
 .agents/
+.playwright-mcp/
+audit_api_results.json
 
 # OS
 Thumbs.db
 .vercel
+

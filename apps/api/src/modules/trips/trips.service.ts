@@ -97,6 +97,38 @@ export class TripsService {
   }
 
   /**
+   * Deletes a trip and cascades all dependent records.
+   * Invariant: Only the trip OWNER can delete a trip.
+   */
+  async deleteTrip(tripId: string, userId: string) {
+    const trip = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        members: true,
+      },
+    });
+
+    if (!trip) {
+      throw new NotFoundException('Trip not found');
+    }
+
+    const membership = trip.members.find((m: any) => m.userId === userId);
+    if (!membership) {
+      throw new ForbiddenException('You are not a member of this trip');
+    }
+
+    if (membership.role !== 'OWNER') {
+      throw new ForbiddenException('Only the trip owner can delete this trip');
+    }
+
+    await this.prisma.trip.delete({
+      where: { id: tripId },
+    });
+
+    return { success: true, message: 'Trip deleted successfully' };
+  }
+
+  /**
    * Lists all trips the user is a member of, sorted by most recently created.
    */
   async listUserTrips(userId: string) {

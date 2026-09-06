@@ -53,43 +53,68 @@ export function SocialAuthButtons() {
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!googleClientId) return;
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: async (response: any) => {
-            if (response.credential) {
-              try {
-                setLoadingProvider('google');
-                const res = await authApi.googleVerifyToken({ idToken: response.credential });
-                localStorage.setItem('accessToken', res.data.accessToken);
-                updateUser(res.data.user);
-                router.push('/dashboard');
-              } catch (err) {
-                console.error('Google One Tap sign in failed:', err);
-              } finally {
-                setLoadingProvider(null);
-              }
-            }
-          },
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        });
+    let isCancelled = false;
 
-        // Prompt Google One Tap widget
-        window.google.accounts.id.prompt();
+    const initGsi = () => {
+      if (isCancelled || !window.google?.accounts?.id) return;
+
+      try {
+        window.google.accounts.id.cancel();
+      } catch {
+        // GSI cancel is safe to ignore if no session active
+        void 0;
       }
+
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response: any) => {
+          if (response.credential) {
+            try {
+              setLoadingProvider('google');
+              const res = await authApi.googleVerifyToken({ idToken: response.credential });
+              localStorage.setItem('accessToken', res.data.accessToken);
+              updateUser(res.data.user);
+              router.push('/dashboard');
+            } catch (err) {
+              console.error('Google One Tap sign in failed:', err);
+            } finally {
+              setLoadingProvider(null);
+            }
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+
+      // Prompt Google One Tap widget
+      window.google.accounts.id.prompt();
     };
 
-    document.head.appendChild(script);
+    if (window.google?.accounts?.id) {
+      initGsi();
+    } else {
+      const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = initGsi;
+        document.head.appendChild(script);
+      } else {
+        existingScript.addEventListener('load', initGsi);
+      }
+    }
 
     return () => {
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
+      isCancelled = true;
+      try {
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.cancel();
+        }
+      } catch {
+        // Cleanup cancellation is safe to ignore
+        void 0;
       }
     };
   }, [router, updateUser]);

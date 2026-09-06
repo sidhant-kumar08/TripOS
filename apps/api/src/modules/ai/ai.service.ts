@@ -639,50 +639,67 @@ Total Expenses: ${totalSpent} INR`;
     if (hasExpenseKeywords && hasMoneyNumbers) {
       const proposal = await this.parseExpense(targetTripId, userId, rawInput);
       if (proposal.amountMinor > 0 && proposal.payer) {
+        // Clamp to PostgreSQL 32-bit Integer boundary
+        const safeAmountMinor = Math.min(Math.round(proposal.amountMinor), 2000000000);
         const participants = proposal.participants.length > 0 ? proposal.participants : [proposal.payer];
-        const baseSplit = Math.floor(proposal.amountMinor / participants.length);
-        const remainder = proposal.amountMinor - baseSplit * participants.length;
+        const baseSplit = Math.floor(safeAmountMinor / participants.length);
+        const remainder = safeAmountMinor - baseSplit * participants.length;
         const splits = participants.map((p, idx) => ({
           userId: p.id,
           amount: idx === 0 ? baseSplit + remainder : baseSplit,
         }));
 
-        const created = await this.prisma.expense.create({
-          data: {
-            tripId: targetTripId,
-            payerId: proposal.payer.id,
-            description: proposal.description || 'Dinner & food',
-            amount: Math.round(proposal.amountMinor),
-            currency: proposal.currency || 'INR',
-            category: 'EXPENSE',
-            splits: {
-              create: splits,
+        try {
+          const created = await this.prisma.expense.create({
+            data: {
+              tripId: targetTripId,
+              payerId: proposal.payer.id,
+              description: proposal.description || 'Trip expense',
+              amount: safeAmountMinor,
+              currency: proposal.currency || 'INR',
+              category: 'EXPENSE',
+              splits: {
+                create: splits,
+              },
             },
-          },
-        });
+          });
 
-        const amountFormatted = `₹${(proposal.amountMinor / 100).toFixed(2)}`;
-        const splitFormatted = `₹${(baseSplit / 100).toFixed(2)}`;
+          const amountFormatted = `₹${(safeAmountMinor / 100).toFixed(2)}`;
+          const splitFormatted = `₹${(baseSplit / 100).toFixed(2)}`;
 
-        return {
-          actionType: 'EXPENSE_CREATED',
-          message: `💸 Added expense: "${proposal.description}" for ${amountFormatted}. Paid by ${proposal.payer.name} and split equally among ${participants.length} member(s).`,
-          expense: {
-            id: created.id,
-            description: proposal.description,
-            amountFormatted,
-            payerName: proposal.payer.name,
-            participantsCount: participants.length,
-            splitPerPersonFormatted: splitFormatted,
-          },
-          suggestedActions: [
-            {
-              label: 'View in Expenses',
-              actionType: 'VIEW_EXPENSE',
-              targetPath: `/trips/${targetTripId}/expenses`,
+          return {
+            actionType: 'EXPENSE_CREATED',
+            message: `💸 Added expense: "${proposal.description}" for ${amountFormatted}. Paid by ${proposal.payer.name} and split equally among ${participants.length} member(s).`,
+            expense: {
+              id: created.id,
+              description: proposal.description,
+              amountFormatted,
+              payerName: proposal.payer.name,
+              participantsCount: participants.length,
+              splitPerPersonFormatted: splitFormatted,
             },
-          ],
-        };
+            suggestedActions: [
+              {
+                label: 'View in Expenses',
+                actionType: 'VIEW_EXPENSE',
+                targetPath: `/trips/${targetTripId}/expenses`,
+              },
+            ],
+          };
+        } catch (err: any) {
+          this.logger.error(`Failed to record expense: ${err.message}`, err.stack);
+          return {
+            actionType: 'ANSWER',
+            message: `I understood you wanted to add an expense of ₹${(safeAmountMinor / 100).toFixed(2)}, but could not save it automatically. Please record it directly in the Expenses tab.`,
+            suggestedActions: [
+              {
+                label: 'Open Expenses Tab',
+                actionType: 'VIEW_EXPENSE',
+                targetPath: `/trips/${targetTripId}/expenses`,
+              },
+            ],
+          };
+        }
       }
     }
 

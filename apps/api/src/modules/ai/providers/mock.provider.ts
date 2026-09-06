@@ -157,7 +157,15 @@ export class MockAIProvider implements AIProvider {
    * Deterministic heuristic parser for colloquial Indian expense text.
    */
   private heuristicParseExpense(input: string): RawExpenseExtraction {
-    const text = input.trim();
+    // Isolate actual user text if input was wrapped with trip member context
+    let userText = input;
+    if (input.includes('User Input to Parse:')) {
+      const parts = input.split(/User Input to Parse:\s*/i);
+      if (parts.length > 1) {
+        userText = parts[parts.length - 1].replace(/^["'\s]+|["'\s]+$/g, '');
+      }
+    }
+    const text = userText.trim();
     const lower = text.toLowerCase();
 
     // 1. Parse Amount: e.g. 5000, 5k, 5 k, 2 hazar, 2.5k, rs 500, ₹5000
@@ -174,7 +182,10 @@ export class MockAIProvider implements AIProvider {
       amountMajor = parseFloat(numMatch[1]);
     }
 
-    const amountMinor = Math.round(amountMajor * 100);
+    // Protect against PostgreSQL 32-bit integer overflow (max 2,147,483,647)
+    const MAX_ALLOWED_MINOR = 2000000000;
+    const calculatedMinor = Math.round(amountMajor * 100);
+    const amountMinor = Math.min(calculatedMinor, MAX_ALLOWED_MINOR);
 
     // 2. Parse Payer
     let payerAlias = 'me';
@@ -230,7 +241,14 @@ export class MockAIProvider implements AIProvider {
    * Deterministic heuristic parser for colloquial Indian task text.
    */
   private heuristicParseTask(input: string): RawTaskExtraction {
-    const text = input.trim();
+    let userText = input;
+    if (input.includes('User Input to Parse:')) {
+      const parts = input.split(/User Input to Parse:\s*/i);
+      if (parts.length > 1) {
+        userText = parts[parts.length - 1].replace(/^["'\s]+|["'\s]+$/g, '');
+      }
+    }
+    const text = userText.trim();
     const lower = text.toLowerCase();
 
     // 1. Title inference

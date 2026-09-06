@@ -50,6 +50,14 @@ export class TripsController {
     return this.tripsService.getTripById(tripId, req.user.sub);
   }
 
+  @Delete(':tripId')
+  @UseGuards(JwtGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a trip and cascade all data (Owner only)' })
+  async deleteTrip(@Req() req: any, @Param('tripId') tripId: string) {
+    return this.tripsService.deleteTrip(tripId, req.user.sub);
+  }
+
   @Post(':tripId/invite')
   @UseGuards(JwtGuard)
   @ApiBearerAuth()
