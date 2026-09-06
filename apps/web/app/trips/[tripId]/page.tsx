@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   Calendar,
   DollarSign,
@@ -11,107 +11,47 @@ import {
   UserPlus,
   Copy,
   Check,
-  Mail,
-  Trash2,
   Clock,
   Send,
   MapPin,
   CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   Circle,
   ListTodo,
   Receipt,
-  Shield,
+  Sparkles,
+  ExternalLink,
+  CheckSquare,
 } from 'lucide-react';
-import axios from 'axios';
-import { API_BASE_URL } from '@/lib/runtime-config';
 import { ProtectedRoute } from '@/lib/protected-route';
-import { tripsApi, expensesApi } from '@/lib/api';
+import { commandCenterApi, tripsApi, tasksApi } from '@/lib/api';
 import { PageShell } from '@/components/ui/page-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
-import { StatCard } from '@/components/shared/stat-card';
-import { formatDate, formatDateTime, formatCurrency, getInitials, getCurrencySymbol } from '@/lib/utils';
-
-interface TripMember {
-  userId: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'EDITOR';
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-}
-
-interface PendingSentInvite {
-  id: string;
-  email: string;
-  token: string;
-  createdAt: string;
-  expiresAt: string;
-}
-
-interface TripActivity {
-  id: string;
-  title: string;
-  location?: string;
-  startTime: string;
-  endTime: string;
-}
-
-interface TripTask {
-  id: string;
-  title: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED';
-  assignedTo?: string;
-  dueDate?: string;
-}
-
-interface TripExpense {
-  id: string;
-  description: string;
-  amount: number;
-  currency: string;
-  payer?: { name?: string; email?: string };
-  addedBy?: { name?: string; email?: string; id?: string };
-  payerId?: string;
-  createdAt: string;
-}
-
-interface Trip {
-  id: string;
-  name: string;
-  description?: string;
-  destination?: string;
-  startDate?: string;
-  endDate?: string;
-  members: TripMember[];
-}
+import { formatDate, formatCurrency, getInitials } from '@/lib/utils';
 
 export default function TripDetailPage() {
   return (
     <ProtectedRoute>
-      <TripDetailContent />
+      <TripCommandCenterContent />
     </ProtectedRoute>
   );
 }
 
-function TripDetailContent() {
-  const router = useRouter();
+function TripCommandCenterContent() {
   const params = useParams();
   const tripId = params.tripId as string;
 
-  const [trip, setTrip] = React.useState<Trip | null>(null);
-  const [activities, setActivities] = React.useState<TripActivity[]>([]);
-  const [tasks, setTasks] = React.useState<TripTask[]>([]);
-  const [expenses, setExpenses] = React.useState<TripExpense[]>([]);
-  const [vaultFileCount, setVaultFileCount] = React.useState<number>(0);
-  const [sentInvitations, setSentInvitations] = React.useState<PendingSentInvite[]>([]);
-  const [revokingId, setRevokingId] = React.useState<string | null>(null);
-  const [copiedToken, setCopiedToken] = React.useState<string | null>(null);
+  const [overview, setOverview] = React.useState<any | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [showReadinessDetails, setShowReadinessDetails] = React.useState(false);
+
+  // Invite Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState('');
   const [inviteStatus, setInviteStatus] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -119,57 +59,37 @@ function TripDetailContent() {
   const [copiedLink, setCopiedLink] = React.useState(false);
   const [generatedInviteUrl, setGeneratedInviteUrl] = React.useState<string | null>(null);
 
-  const getAuthHeader = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    return { Authorization: `Bearer ${token}` };
-  };
+  // Task Action Feedback
+  const [completingTaskId, setCompletingTaskId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    loadTripOverview();
+    if (tripId) {
+      loadCommandCenter();
+    }
   }, [tripId]);
 
-  const loadTripOverview = async () => {
+  const loadCommandCenter = async () => {
     try {
       setIsLoading(true);
-      const config = { headers: getAuthHeader() };
-
-      const [tripRes, sentRes, activitiesRes, tasksRes, expensesRes, vaultRes] = await Promise.all([
-        tripsApi.getById(tripId),
-        tripsApi.getTripPendingInvitations(tripId).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/trips/${tripId}/activities`, config).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/trips/${tripId}/tasks`, config).catch(() => ({ data: [] })),
-        expensesApi.list(tripId).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/trips/${tripId}/vault/files`, config).catch(() => ({ data: [] })),
-      ]);
-
-      setTrip(tripRes.data);
-      setSentInvitations(sentRes.data || []);
-      setActivities(activitiesRes.data || []);
-      setTasks(tasksRes.data || []);
-      setExpenses(expensesRes.data || []);
-      setVaultFileCount((vaultRes.data || []).length);
+      const res = await commandCenterApi.getOverview(tripId);
+      setOverview(res.data);
     } catch (error) {
-      console.error('Failed to load trip overview:', error);
-      router.push('/dashboard');
+      console.error('Failed to load Trip Command Center:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleToggleTaskStatus = async (task: TripTask) => {
-    const newStatus = task.status === 'COMPLETED' ? 'OPEN' : 'COMPLETED';
+  const handleQuickCompleteTask = async (taskId: string) => {
     try {
-      const config = { headers: getAuthHeader() };
-      await axios.put(
-        `${API_BASE_URL}/trips/${tripId}/tasks/${task.id}`,
-        { status: newStatus },
-        config
-      );
-      setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))
-      );
-    } catch (err) {
-      console.error('Failed to update task status:', err);
+      setCompletingTaskId(taskId);
+      await tasksApi.update(tripId, taskId, { status: 'COMPLETED' });
+      // Reload overview to update state & readiness
+      await loadCommandCenter();
+    } catch (error) {
+      console.error('Failed to complete task:', error);
+    } finally {
+      setCompletingTaskId(null);
     }
   };
 
@@ -187,7 +107,7 @@ function TripDetailContent() {
         type: 'success',
         message: `Invitation generated for ${inviteEmail}!`,
       });
-      loadTripOverview();
+      loadCommandCenter();
     } catch (error: any) {
       setInviteStatus({
         type: 'error',
@@ -198,555 +118,485 @@ function TripDetailContent() {
     }
   };
 
-  const handleRevokeInvitation = async (invitationId: string) => {
-    try {
-      setRevokingId(invitationId);
-      await tripsApi.revokeInvitation(tripId, invitationId);
-      setSentInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to revoke invitation');
-    } finally {
-      setRevokingId(null);
-    }
-  };
-
-  const copySpecificToken = (token: string) => {
-    if (typeof window !== 'undefined') {
-      const inviteUrl = `${window.location.origin}/invite/${token}`;
-      navigator.clipboard.writeText(inviteUrl);
-      setCopiedToken(token);
-      setTimeout(() => setCopiedToken(null), 2000);
-    }
-  };
-
-  const copyGeneratedLink = () => {
-    if (generatedInviteUrl && typeof window !== 'undefined') {
-      navigator.clipboard.writeText(generatedInviteUrl);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
-    }
-  };
-
-  const openInviteModal = () => {
-    setIsInviteModalOpen(true);
-    setInviteStatus(null);
-    setGeneratedInviteUrl(null);
+  const handleCopyInviteLink = () => {
+    if (!generatedInviteUrl) return;
+    navigator.clipboard.writeText(generatedInviteUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   if (isLoading) {
     return (
-      <PageShell
-        title="Loading trip workspace..."
-        breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Trip Overview' }]}
-      >
-        <div className="trip-glass-card rounded-2xl p-12 text-center animate-pulse">
-          <p className="text-sm text-slate-500">Loading trip details and workspace overview...</p>
+      <PageShell title="Loading Command Center...">
+        <div className="space-y-6 max-w-5xl mx-auto animate-pulse">
+          {/* Header Skeleton */}
+          <div className="h-28 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+          {/* Navigation Bar Skeleton */}
+          <div className="h-12 rounded-2xl bg-slate-200 dark:bg-slate-800/40" />
+          {/* Readiness Card Skeleton */}
+          <div className="h-36 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+          {/* Content Grid Skeleton */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800/50" />
+            <div className="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800/50" />
+          </div>
         </div>
       </PageShell>
     );
   }
 
-  if (!trip) {
+  if (!overview?.trip) {
     return (
-      <PageShell
-        title="Trip not found"
-        backHref="/dashboard"
-        backLabel="Return to Dashboard"
-      >
-        <div className="trip-glass-card rounded-2xl p-8 text-center">
-          <p className="text-slate-600 dark:text-slate-400">The requested trip workspace could not be found.</p>
+      <PageShell title="Trip Not Found">
+        <div className="text-center py-16">
+          <p className="text-slate-500 mb-4">This trip does not exist or you do not have permission to view it.</p>
+          <Link href="/dashboard">
+            <Button variant="default">Return to Dashboard</Button>
+          </Link>
         </div>
       </PageShell>
     );
   }
 
-  // Calculate summary metrics
-  const totalSpend = expenses
-    .filter((e: any) => e.category !== 'SETTLEMENT')
-    .reduce((acc, curr) => acc + curr.amount, 0);
-  const primaryCurrency = expenses.length > 0 ? (expenses[0].currency || 'INR') : 'INR';
-
-  const completedTasksCount = tasks.filter((t) => t.status === 'COMPLETED').length;
-  const taskProgressPercent = tasks.length > 0 ? Math.round((completedTasksCount / tasks.length) * 100) : 0;
-
-  // Next upcoming activity
-  const now = new Date();
-  const upcomingActivities = activities
-    .slice()
-    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-  const nextActivity = upcomingActivities.find((a) => new Date(a.endTime) >= now) || upcomingActivities[0];
-
-  // Trip Countdown / Status
-  let tripStatusBadge = 'Active Workspace';
-  let tripCountdownText = '';
-  if (trip.startDate) {
-    const start = new Date(trip.startDate);
-    const end = trip.endDate ? new Date(trip.endDate) : null;
-    const diffDays = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays > 0) {
-      tripCountdownText = `Starts in ${diffDays} day${diffDays === 1 ? '' : 's'}`;
-      tripStatusBadge = `Upcoming (${diffDays}d)`;
-    } else if (end && now > end) {
-      tripCountdownText = 'Trip Completed';
-      tripStatusBadge = 'Completed Journey';
-    } else {
-      tripCountdownText = 'In Progress Now';
-      tripStatusBadge = 'Live Journey';
-    }
-  }
+  const { trip, readiness, myAttention, waitingOnOthers, nextUp, financialSnapshot, progress } = overview;
 
   return (
     <PageShell
       title={trip.name}
-      subtitle={trip.destination ? `📍 ${trip.destination}` : 'Collaborative trip workspace'}
+      subtitle={trip.destination ? `📍 ${trip.destination}` : 'Group Trip Command Center'}
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },
         { label: trip.name },
       ]}
       actions={
-        <div className="flex items-center gap-2">
-          <Button onClick={openInviteModal} variant="default" size="sm" className="shadow-glow-primary">
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            Invite Member
-          </Button>
-        </div>
+        <Button variant="default" onClick={() => setIsInviteModalOpen(true)} className="gap-2 shadow-sm">
+          <UserPlus className="h-4 w-4" />
+          <span>Invite Squad</span>
+        </Button>
       }
     >
-      {/* Enhanced Trip Hero Banner */}
-      <div className="mb-8 trip-glass-card rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-indigo-900/20 via-blue-900/10 to-purple-900/20 border-indigo-200/60 dark:border-indigo-900/50 relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="accent" className="font-bold">
-                {tripStatusBadge}
-              </Badge>
-              {trip.startDate && (
-                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-200/60 dark:border-indigo-900/40 flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {formatDate(trip.startDate)} {trip.endDate ? `→ ${formatDate(trip.endDate)}` : ''}
-                </span>
-              )}
-              {tripCountdownText && (
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  • {tripCountdownText}
-                </span>
-              )}
-            </div>
-            {trip.description && (
-              <p className="text-sm text-slate-700 dark:text-slate-300 max-w-2xl leading-relaxed">
-                {trip.description}
-              </p>
-            )}
-          </div>
+      <div className="space-y-6 max-w-5xl mx-auto">
+        {/* ================= 1. TRIP HEADER & CONTEXT BAR ================= */}
+        <div className="relative overflow-hidden rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-5 sm:p-7 text-white shadow-xl">
+          {/* Subtle background glow */}
+          <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-indigo-500/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-purple-500/15 blur-3xl" />
 
-          {/* Members Stack Preview */}
-          <div className="flex items-center gap-3 shrink-0 bg-white/70 dark:bg-slate-900/70 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-            <div className="flex -space-x-2 overflow-hidden">
-              {trip.members?.map((m) => (
-                <div
-                  key={m.userId}
-                  title={`${m.user.name} (${m.role})`}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-xs font-bold text-white ring-2 ring-white dark:ring-slate-900 shadow-sm"
-                >
-                  {getInitials(m.user.name || m.user.email)}
-                </div>
-              ))}
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black font-display tracking-tight text-white">
+                  {trip.name}
+                </h1>
+                {progress.daysAwayLabel && (
+                  <span className="rounded-full bg-indigo-500/30 border border-indigo-400/40 px-2.5 py-0.5 text-xs font-bold text-indigo-200 backdrop-blur">
+                    {progress.daysAwayLabel}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-indigo-200/90">
+                {trip.destination && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-400" />
+                    {trip.destination}
+                  </span>
+                )}
+                {trip.startDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+                    {formatDate(trip.startDate)}
+                    {trip.endDate && ` – ${formatDate(trip.endDate)}`}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="pr-1">
-              <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">
-                {trip.members?.length} {trip.members?.length === 1 ? 'Traveler' : 'Travelers'}
-              </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                In Workspace
-              </p>
+
+            {/* Active Squad Avatars */}
+            <div className="flex items-center gap-2.5 self-start sm:self-auto bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/15">
+              <div className="flex -space-x-2">
+                {trip.members.slice(0, 4).map((m: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-[10px] font-bold text-white ring-2 ring-slate-900 shadow-sm"
+                    title={m.user.name || m.user.email}
+                  >
+                    {getInitials(m.user.name || m.user.email)}
+                  </div>
+                ))}
+              </div>
+              <span className="text-xs font-semibold text-indigo-100">
+                {trip.members.length} {trip.members.length === 1 ? 'Traveler' : 'Travelers'}
+              </span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 4 Key Summary Glance Metrics */}
-      <div className="mb-8 grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total Trip Spend"
-          value={formatCurrency(totalSpend, primaryCurrency)}
-          subtext={`${expenses.length} transaction${expenses.length === 1 ? '' : 's'} recorded`}
-          icon={<span className="font-bold text-sm">{getCurrencySymbol(primaryCurrency)}</span>}
-          variant="indigo"
-        />
+        {/* ================= 2. MODULE NAVIGATION JUMP BAR ================= */}
+        <div className="flex items-center overflow-x-auto scrollbar-none gap-2 p-1.5 rounded-2xl border border-slate-200/80 bg-white/80 dark:border-slate-800 dark:bg-slate-900/80 backdrop-blur-md shadow-sm">
+          <button
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-xs sm:text-sm font-bold shadow-sm shrink-0"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Command Center</span>
+          </button>
 
-        <StatCard
-          label="Next Activity"
-          value={nextActivity ? nextActivity.title : 'No upcoming plans'}
-          subtext={nextActivity ? formatDateTime(nextActivity.startTime) : 'Schedule plans in itinerary'}
-          icon={<Calendar className="h-4 w-4" />}
-          variant="default"
-        />
+          <Link href={`/trips/${tripId}/itinerary`}>
+            <button className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition shrink-0">
+              <Calendar className="h-4 w-4 text-indigo-500" />
+              <span>Itinerary</span>
+              {progress.activitiesCount > 0 && (
+                <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 text-[10px] font-bold">
+                  {progress.activitiesCount}
+                </span>
+              )}
+            </button>
+          </Link>
 
-        <StatCard
-          label="Tasks Completed"
-          value={`${completedTasksCount} / ${tasks.length}`}
-          subtext={`${taskProgressPercent}% completion rate`}
-          icon={<CheckCircle2 className="h-4 w-4" />}
-          variant={tasks.length > 0 && completedTasksCount === tasks.length ? 'success' : 'default'}
-        />
+          <Link href={`/trips/${tripId}/expenses`}>
+            <button className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition shrink-0">
+              <DollarSign className="h-4 w-4 text-emerald-500" />
+              <span>Expenses</span>
+              {financialSnapshot.totalSpend > 0 && (
+                <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.2 text-[10px] font-bold">
+                  {formatCurrency(financialSnapshot.totalSpend, financialSnapshot.currency)}
+                </span>
+              )}
+            </button>
+          </Link>
 
-        <StatCard
-          label="Trip Documents"
-          value={`${vaultFileCount} Files`}
-          subtext="Tickets, reservations & vouchers"
-          icon={<FileText className="h-4 w-4" />}
-          variant="indigo"
-        />
-      </div>
+          <Link href={`/trips/${tripId}/tasks`}>
+            <button className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition shrink-0">
+              <ListTodo className="h-4 w-4 text-purple-500" />
+              <span>Tasks</span>
+              {progress.tasksTotal > 0 && (
+                <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 text-[10px] font-bold">
+                  {progress.tasksCompleted}/{progress.tasksTotal}
+                </span>
+              )}
+            </button>
+          </Link>
 
-      {/* 3 Main Workspace Feature Gateways */}
-      <div className="mb-8 grid gap-6 md:grid-cols-3">
-        {/* Itinerary Gateway */}
-        <Link
-          href={`/trips/${tripId}/itinerary`}
-          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/60 hover:shadow-xl flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300 mb-4 shadow-inner">
-              <Calendar className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-              Itinerary & Tasks
-            </h3>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Schedule activities, pin locations, time slots, and assign group tasks.
-            </p>
-          </div>
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-            <span>View Timeline ({activities.length})</span>
-            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
-          </div>
-        </Link>
-
-        {/* Expenses Gateway */}
-        <Link
-          href={`/trips/${tripId}/expenses`}
-          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-xl flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 mb-4 shadow-inner">
-              <DollarSign className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
-              Expenses & Splits
-            </h3>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Track shared purchases, split costs fairly, and calculate minimal settlement debts.
-            </p>
-          </div>
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-            <span>Open Ledger ({expenses.length})</span>
-            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
-          </div>
-        </Link>
-
-        {/* Vault Gateway */}
-        <Link
-          href={`/trips/${tripId}/vault`}
-          className="group trip-glass-card rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-purple-400/60 hover:shadow-xl flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-300 mb-4 shadow-inner">
-              <FileText className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition">
-              Trip Vault
-            </h3>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Secure repository for flight boarding passes, Airbnb vouchers, and IDs.
-            </p>
-          </div>
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-400">
-            <span>Access Vault ({vaultFileCount})</span>
-            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition" />
-          </div>
-        </Link>
-      </div>
-
-      {/* 2-Column Overview Widgets Grid */}
-      <div className="mb-8 grid gap-8 lg:grid-cols-2">
-        {/* Left Column: Itinerary Preview & Recent Spends */}
-        <div className="space-y-6">
-          {/* Upcoming Schedule Preview */}
-          <div className="trip-glass-card rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Upcoming Itinerary
-                </h3>
-              </div>
-              <Link
-                href={`/trips/${tripId}/itinerary`}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1"
-              >
-                <span>Full Timeline</span>
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-
-            {activities.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500 space-y-2">
-                <p>No activities scheduled yet.</p>
-                <Link href={`/trips/${tripId}/itinerary`}>
-                  <Button variant="outline" size="sm" className="mt-1 text-xs">
-                    + Add First Activity
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {upcomingActivities.slice(0, 3).map((act) => (
-                  <div
-                    key={act.id}
-                    className="p-3 rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center shrink-0">
-                        <Clock className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                          {act.title}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
-                          {act.location && (
-                            <span className="flex items-center gap-0.5">
-                              <MapPin className="h-3 w-3 text-indigo-500" /> {act.location} •
-                            </span>
-                          )}
-                          <span>{formatDateTime(act.startTime)}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Spends Preview */}
-          <div className="trip-glass-card rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Recent Spends
-                </h3>
-              </div>
-              <Link
-                href={`/trips/${tripId}/expenses`}
-                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1"
-              >
-                <span>View Ledger</span>
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-
-            {expenses.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500 space-y-2">
-                <p>No expenses recorded yet.</p>
-                <Link href={`/trips/${tripId}/expenses`}>
-                  <Button variant="outline" size="sm" className="mt-1 text-xs">
-                    + Add First Expense
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {expenses.slice(0, 3).map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="p-3 rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-                        {exp.description}
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Paid by {exp.payer?.name || 'Member'} • {formatDate(exp.createdAt)}
-                      </p>
-                    </div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      {formatCurrency(exp.amount, exp.currency || 'INR')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <Link href={`/trips/${tripId}/vault`}>
+            <button className="flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition shrink-0">
+              <FileText className="h-4 w-4 text-blue-500" />
+              <span>Vault</span>
+              {progress.vaultFilesCount > 0 && (
+                <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.2 text-[10px] font-bold">
+                  {progress.vaultFilesCount}
+                </span>
+              )}
+            </button>
+          </Link>
         </div>
 
-        {/* Right Column: Active Tasks & Members */}
-        <div className="space-y-6">
-          {/* Active Tasks Checklist Preview */}
-          <div className="trip-glass-card rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <ListTodo className="h-4 w-4 text-purple-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Active Tasks Checklist
-                </h3>
+        {/* ================= 3. TRIP READINESS CARD ================= */}
+        <div className="rounded-3xl border border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 p-5 sm:p-6 shadow-sm backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {/* Visual Score Ring */}
+              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-50 to-indigo-100 dark:from-indigo-950/60 dark:to-indigo-900/40 border border-indigo-200/60 dark:border-indigo-800/60 shrink-0">
+                <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                  {readiness.score}%
+                </span>
               </div>
-              <Link
-                href={`/trips/${tripId}/itinerary`}
-                className="text-xs font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400 flex items-center gap-1"
-              >
-                <span>All Tasks</span>
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
 
-            {tasks.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500 space-y-2">
-                <p>No tasks assigned yet.</p>
-                <Link href={`/trips/${tripId}/itinerary`}>
-                  <Button variant="outline" size="sm" className="mt-1 text-xs">
-                    + Add First Task
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {tasks.slice(0, 4).map((task) => (
-                  <div
-                    key={task.id}
-                    className="p-3 rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTaskStatus(task)}
-                        className="text-slate-400 hover:text-emerald-600 transition shrink-0"
-                      >
-                        {task.status === 'COMPLETED' ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <Circle className="h-4 w-4 text-slate-300 dark:text-slate-600" />
-                        )}
-                      </button>
-                      <span
-                        className={`text-xs font-semibold ${
-                          task.status === 'COMPLETED'
-                            ? 'line-through text-slate-400 dark:text-slate-500'
-                            : 'text-slate-800 dark:text-slate-200'
-                        }`}
-                      >
-                        {task.title}
-                      </span>
-                    </div>
-
-                    <Badge
-                      variant={
-                        task.status === 'COMPLETED'
-                          ? 'success'
-                          : task.status === 'IN_PROGRESS'
-                          ? 'warning'
-                          : 'secondary'
-                      }
-                      className="text-[10px]"
-                    >
-                      {task.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Members & Invitations Section */}
-          <div className="trip-glass-card rounded-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Collaborators & Access
-                </h3>
-              </div>
-              <Button onClick={openInviteModal} size="sm" variant="outline" className="text-xs h-7">
-                <UserPlus className="h-3.5 w-3.5 mr-1" />
-                Invite
-              </Button>
-            </div>
-
-            <div className="space-y-2.5 max-h-60 overflow-y-auto">
-              {trip.members?.map((member) => (
-                <div
-                  key={member.userId}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/70 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/50"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 font-bold text-white text-xs shrink-0">
-                      {getInitials(member.user.name || member.user.email)}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
-                        {member.user.name}
-                      </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {member.user.email}
-                      </p>
-                    </div>
-                  </div>
-
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-display">
+                    Trip Readiness
+                  </h2>
                   <Badge
-                    variant={member.role === 'OWNER' ? 'accent' : 'secondary'}
-                    className="text-[10px]"
+                    variant={
+                      readiness.status === 'READY'
+                        ? 'success'
+                        : readiness.status === 'NEEDS_ATTENTION'
+                        ? 'warning'
+                        : 'accent'
+                    }
                   >
-                    {member.role}
+                    {readiness.status === 'READY'
+                      ? 'Ready to Go 🛫'
+                      : readiness.status === 'NEEDS_ATTENTION'
+                      ? 'Action Needed'
+                      : 'In Planning'}
                   </Badge>
                 </div>
-              ))}
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  {readiness.summaryText}
+                </p>
+              </div>
             </div>
 
-            {/* Pending Sent Invitations */}
-            {sentInvitations.length > 0 && (
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Pending Invitations ({sentInvitations.length})
-                </p>
-                {sentInvitations.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="flex items-center justify-between p-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-xs"
-                  >
-                    <span className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[140px] text-[11px]">
-                      {inv.email}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => copySpecificToken(inv.token)}
-                        className="px-2 py-0.5 rounded-lg bg-white border border-slate-200 dark:bg-slate-800 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition"
-                      >
-                        {copiedToken === inv.token ? 'Copied' : 'Copy Link'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRevokeInvitation(inv.id)}
-                        disabled={revokingId === inv.id}
-                        className="p-1 text-slate-400 hover:text-red-600 transition disabled:opacity-50"
-                        title="Revoke"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReadinessDetails(!showReadinessDetails)}
+              className="gap-1.5 self-start sm:self-auto text-xs"
+            >
+              <span>{showReadinessDetails ? 'Hide Breakdown' : 'Explain Score'}</span>
+              {showReadinessDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+
+          {/* Expandable Breakdown Checklist */}
+          {showReadinessDetails && (
+            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+              {readiness.checks.map((chk: any) => (
+                <div
+                  key={chk.id}
+                  className="flex items-start gap-2.5 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/60 bg-slate-50/60 dark:bg-slate-950/40"
+                >
+                  <div className="mt-0.5 shrink-0">
+                    {chk.status === 'COMPLETE' ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    ) : chk.status === 'IN_PROGRESS' ? (
+                      <Clock className="h-4 w-4 text-amber-500" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{chk.label}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{chk.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ================= 4. PRIORITY 1: MY ATTENTION ================= */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4 text-indigo-500" />
+              <span>What Needs My Attention</span>
+            </h3>
+            {myAttention.length > 0 && (
+              <span className="rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 px-2 py-0.5 text-xs font-bold">
+                {myAttention.length} Action{myAttention.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {myAttention.length === 0 ? (
+            <div className="rounded-3xl border border-emerald-100 bg-emerald-50/50 dark:border-emerald-950/60 dark:bg-emerald-950/20 p-5 text-center sm:text-left sm:flex sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3 justify-center sm:justify-start">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300 shrink-0">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">You're all caught up! ✨</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">No overdue tasks or urgent obligations waiting on you.</p>
+                </div>
+              </div>
+              <Link href={`/trips/${tripId}/itinerary`} className="mt-3 sm:mt-0 block">
+                <Button variant="outline" size="sm" className="text-xs gap-1">
+                  <span>View Timeline</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {myAttention.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900 shadow-sm transition hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl shrink-0 mt-0.5 ${
+                        item.urgency === 'HIGH'
+                          ? 'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-300'
+                          : item.urgency === 'MEDIUM'
+                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300'
+                      }`}
+                    >
+                      {item.urgency === 'HIGH' ? (
+                        <AlertTriangle className="h-4 w-4" />
+                      ) : item.sourceType === 'EXPENSE' ? (
+                        <DollarSign className="h-4 w-4" />
+                      ) : (
+                        <CheckSquare className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{item.title}</h4>
+                        <span
+                          className={`rounded-full px-2 py-0.2 text-[10px] font-bold uppercase tracking-wider ${
+                            item.urgency === 'HIGH'
+                              ? 'bg-red-50 text-red-700 dark:bg-red-950/80 dark:text-red-300'
+                              : item.urgency === 'MEDIUM'
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300'
+                              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {item.urgency === 'HIGH' ? 'Overdue' : item.urgency === 'MEDIUM' ? 'Due Soon' : 'Action'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{item.subtitle}</p>
                     </div>
                   </div>
-                ))}
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    {item.sourceType === 'TASK' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={completingTaskId === item.sourceId}
+                        onClick={() => handleQuickCompleteTask(item.sourceId)}
+                        className="text-xs gap-1 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950 dark:hover:text-emerald-300"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Done</span>
+                      </Button>
+                    )}
+
+                    <Link href={item.actionUrl}>
+                      <Button variant="default" size="sm" className="text-xs gap-1">
+                        <span>{item.actionLabel}</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ================= 5. WAITING ON OTHERS & NEXT UP (GRID) ================= */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Waiting on Others */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-purple-500" />
+                <span>Waiting on Others</span>
+              </h3>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 p-4 shadow-sm space-y-3">
+              {waitingOnOthers.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-6">
+                  No pending bottlenecks or items waiting on other members.
+                </p>
+              ) : (
+                waitingOnOthers.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.title}</p>
+                      <p className="text-[11px] text-purple-600 dark:text-purple-400 flex items-center gap-1 mt-0.5">
+                        <span className="font-semibold">{item.assigneeName}</span>
+                        {item.dueDate && <span>• Due {formatDate(item.dueDate)}</span>}
+                      </p>
+                    </div>
+
+                    <Link href={item.actionUrl} className="shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs px-2 text-slate-500 hover:text-slate-900">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Next Up */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-blue-500" />
+                <span>Next Up on Schedule</span>
+              </h3>
+              <Link href={`/trips/${tripId}/itinerary`} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                Full Itinerary →
+              </Link>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 p-4 shadow-sm space-y-3">
+              {nextUp.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-xs text-slate-500 mb-2">No timeline events scheduled yet.</p>
+                  <Link href={`/trips/${tripId}/itinerary`}>
+                    <Button variant="outline" size="sm" className="text-xs">Add First Activity</Button>
+                  </Link>
+                </div>
+              ) : (
+                nextUp.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/70 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.title}</p>
+                        {item.dayLabel && (
+                          <span className="rounded-full bg-blue-100 px-1.5 py-0.2 text-[9px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+                            {item.dayLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {item.date && `${item.date} `}
+                        {item.time && `• ${item.time} `}
+                        {item.location && `• 📍 ${item.location}`}
+                      </p>
+                    </div>
+
+                    <Link href={item.actionUrl} className="shrink-0">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs px-2 text-slate-500 hover:text-slate-900">
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ================= 6. FINANCIAL SNAPSHOT CARD ================= */}
+        <div className="rounded-3xl border border-emerald-100/80 bg-white/90 dark:border-emerald-950/60 dark:bg-slate-900/90 p-5 sm:p-6 shadow-sm backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                <Receipt className="h-6 w-6" />
               </div>
-            )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white font-display">
+                    Financial Snapshot
+                  </h3>
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 text-xs font-bold">
+                    {formatCurrency(financialSnapshot.totalSpend, financialSnapshot.currency)} Total
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
+                  {financialSnapshot.myObligationSummary}
+                </p>
+              </div>
+            </div>
+
+            <Link href={`/trips/${tripId}/expenses`} className="self-start sm:self-auto">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                <span>View Expense Ledger</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* INVITE MEMBER MODAL */}
+      {/* ================= INVITE SQUAD MODAL ================= */}
       <Modal
         isOpen={isInviteModalOpen}
         onClose={() => {
@@ -754,17 +604,34 @@ function TripDetailContent() {
           setInviteStatus(null);
           setGeneratedInviteUrl(null);
         }}
-        title="Invite Friend to Trip"
-        description="Send an invitation link or email for this workspace."
-        maxWidth="lg"
+        title="Invite Travelers to Squad"
       >
-        <div className="space-y-5 mt-2">
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500">
+            Invite friends to collaborate on this trip. They will be able to add activities, log expenses, and upload documents.
+          </p>
+
+          <form onSubmit={handleInvite} className="space-y-3">
+            <Input
+              label="Email Address"
+              type="email"
+              placeholder="friend@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              required
+            />
+            <Button variant="default" type="submit" className="w-full gap-2" disabled={isInviting}>
+              <Send className="h-4 w-4" />
+              <span>{isInviting ? 'Generating...' : 'Send Invitation Link'}</span>
+            </Button>
+          </form>
+
           {inviteStatus && (
             <div
-              className={`rounded-xl border p-3 text-xs ${
+              className={`p-3 rounded-xl text-xs font-medium ${
                 inviteStatus.type === 'success'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-200'
-                  : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-200'
+                  ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                  : 'bg-red-50 text-red-800 dark:bg-red-950/60 dark:text-red-300'
               }`}
             >
               {inviteStatus.message}
@@ -772,64 +639,24 @@ function TripDetailContent() {
           )}
 
           {generatedInviteUrl && (
-            <div className="space-y-3 p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60">
-              <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
-                Share this direct invite link with your friend:
-              </p>
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+              <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Shareable Invite URL:</p>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={generatedInviteUrl}
-                  className="flex-1 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 dark:border-indigo-800 dark:bg-slate-900 dark:text-slate-200"
+                  className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-mono select-all"
                 />
-                <Button onClick={copyGeneratedLink} size="sm" variant="default">
-                  {copiedLink ? <Check className="h-4 w-4 text-white" /> : <Copy className="h-4 w-4" />}
-                  {copiedLink ? 'Copied' : 'Copy'}
+                <Button variant="outline" size="sm" onClick={handleCopyInviteLink} className="gap-1 text-xs shrink-0">
+                  {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedLink ? 'Copied' : 'Copy'}</span>
                 </Button>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                They can open this link to preview and accept the trip invite.
-              </p>
             </div>
           )}
-
-          <form onSubmit={handleInvite} className="space-y-4">
-            <Input
-              type="email"
-              label="Friend's Email Address *"
-              placeholder="friend@example.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              icon={<Mail className="h-4 w-4" />}
-              required
-            />
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setIsInviteModalOpen(false);
-                  setInviteStatus(null);
-                  setGeneratedInviteUrl(null);
-                }}
-              >
-                Close
-              </Button>
-              <Button
-                type="submit"
-                variant="default"
-                isLoading={isInviting}
-              >
-                <Send className="h-4 w-4 mr-1.5" />
-                Generate & Send Invite
-              </Button>
-            </div>
-          </form>
         </div>
       </Modal>
     </PageShell>
   );
 }
-

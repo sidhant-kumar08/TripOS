@@ -109,4 +109,8 @@ export const tasksApi = {
   delete: (tripId: string, taskId: string) => api.delete(`/trips/${tripId}/tasks/${taskId}`),
 };
 
+export const commandCenterApi = {
+  getOverview: (tripId: string) => api.get(`/trips/${tripId}/overview`),
+};
+
 export default api;

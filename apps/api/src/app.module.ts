@@ -7,6 +7,7 @@ import { UsersModule } from './modules/users/users.module';
 import { ItineraryModule } from './modules/itinerary/itinerary.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { VaultModule } from './modules/vault/vault.module';
+import { CommandCenterModule } from './modules/command-center/command-center.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingModule } from './common/logging/logging.module';
 import { DailyFileLogService } from './common/logging/daily-file-log.service';
@@ -95,6 +96,7 @@ import { AppController } from './app.controller';
     ItineraryModule,
     ExpensesModule,
     VaultModule,
+    CommandCenterModule,
   ],
   providers: [AllExceptionsFilter],
 })
