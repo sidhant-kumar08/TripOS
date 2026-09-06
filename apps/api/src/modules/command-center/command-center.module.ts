@@ -4,13 +4,16 @@
  */
 
 import { Module } from '@nestjs/common';
+import { DatabaseModule } from '@/common/database.module';
+import { AuthModule } from '../auth/auth.module';
 import { CommandCenterController } from './command-center.controller';
 import { CommandCenterService } from './command-center.service';
-import { PrismaService } from '@/common/services/prisma.service';
 
 @Module({
+  imports: [DatabaseModule, AuthModule],
   controllers: [CommandCenterController],
-  providers: [CommandCenterService, PrismaService],
+  providers: [CommandCenterService],
   exports: [CommandCenterService],
 })
 export class CommandCenterModule {}
+
