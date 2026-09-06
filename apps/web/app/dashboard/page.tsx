@@ -319,25 +319,23 @@ function DashboardContent() {
           variant="default"
         />
         <StatCard
-          label="AI Operations"
-          value="Operational"
-          subtext="Gemini & Indian NLP Copilot"
+          label="Trip Assistant"
+          value="Active"
+          subtext="Instant planning & insights"
           icon={<Sparkles className="h-4 w-4 text-amber-500" />}
           variant="success"
         />
         <StatCard
           label="Trip Vault"
-          value="Encrypted"
+          value="Secure"
           subtext="Passports, vouchers & tickets"
           icon={<Compass className="h-4 w-4" />}
           variant="default"
         />
       </div>
 
-      {/* AI Intelligence Hub for Trips */}
-      {trips.length > 0 && (
-        <DashboardAIHub trips={trips} onDataChanged={loadData} />
-      )}
+      {/* AI Assistant for Trips */}
+      <DashboardAIHub trips={trips} onDataChanged={loadData} />
 
       {/* Filter and Search Bar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -6,14 +6,14 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@/common/database.module';
 import { AuthModule } from '../auth/auth.module';
-import { AIController } from './ai.controller';
+import { AIController, GlobalAIController } from './ai.controller';
 import { AIService } from './ai.service';
 import { GeminiProvider } from './providers/gemini.provider';
 import { MockAIProvider } from './providers/mock.provider';
 
 @Module({
   imports: [DatabaseModule, AuthModule],
-  controllers: [AIController],
+  controllers: [AIController, GlobalAIController],
   providers: [
     AIService,
     GeminiProvider,

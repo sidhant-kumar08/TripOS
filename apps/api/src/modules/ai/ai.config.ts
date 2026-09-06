@@ -18,7 +18,7 @@ export interface AIConfig {
 export function getAIConfig(): AIConfig {
   const provider = (process.env.AI_PROVIDER || (process.env.AI_API_KEY || process.env.GEMINI_API_KEY ? 'gemini' : 'mock')) as 'gemini' | 'mock';
   const apiKey = process.env.AI_API_KEY || process.env.GEMINI_API_KEY || '';
-  const model = process.env.AI_MODEL || 'gemini-2.0-flash';
+  const model = process.env.AI_MODEL || 'gemini-3.6-flash';
   const enabled = process.env.AI_ENABLED !== 'false';
   const maxOutputTokens = parseInt(process.env.AI_MAX_OUTPUT_TOKENS || '1024', 10);
   const dailyRequestLimit = parseInt(process.env.AI_DAILY_REQUEST_LIMIT || '200', 10);

@@ -114,6 +114,8 @@ export const commandCenterApi = {
 };
 
 export const aiApi = {
+  chat: (text: string, tripId?: string) =>
+    api.post('/ai/chat', { text, tripId }),
   parseExpense: (tripId: string, text: string) =>
     api.post(`/trips/${tripId}/ai/parse-expense`, { text }),
   parseTask: (tripId: string, text: string) =>

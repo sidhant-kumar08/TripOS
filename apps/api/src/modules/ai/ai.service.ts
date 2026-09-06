@@ -18,6 +18,7 @@ import {
   ResolvedMember,
   AskTripOSResponse,
   TripBriefingResponse,
+  UnifiedChatResponse,
 } from './ai.types';
 import {
   EXPENSE_EXTRACTION_SCHEMA,
@@ -520,5 +521,222 @@ Total Expenses: ${totalSpent} INR`;
     }
 
     return bestMatch;
+  }
+
+  /**
+   * Single unified conversational chat handler for TripOS AI.
+   * Seamlessly interprets plain language intent:
+   * - Creates trips ("Create a manali trip with 5 peoples", "Plan a goa trip")
+   * - Logs expenses ("I spent 5000 on dinner", "Rahul paid 1200 for cab")
+   * - Captures tasks ("Remind Rahul to book cab tomorrow", "Pack luggage by Friday")
+   * - Answers questions ("What do I need to do?", "Who owes me money?", "Are we ready?")
+   */
+  async processUnifiedChat(
+    userId: string,
+    text: string,
+    tripId?: string,
+  ): Promise<UnifiedChatResponse> {
+    const rawInput = text.trim();
+    if (!rawInput) {
+      throw new BadRequestException('Please provide a message or instruction.');
+    }
+    const lower = rawInput.toLowerCase();
+
+    // 1. INTENT: CREATE TRIP
+    const isCreateTrip =
+      (lower.includes('create') && (lower.includes('trip') || lower.includes('tour') || lower.includes('travel'))) ||
+      (lower.includes('plan') && (lower.includes('trip') || lower.includes('tour'))) ||
+      lower.startsWith('new trip') ||
+      lower.includes('make a trip');
+
+    if (isCreateTrip) {
+      let destination = 'TBD';
+      const toMatch = rawInput.match(/(?:to|in|for|at)\s+([A-Za-z]+)/i);
+      const tripMatch = rawInput.match(/([A-Za-z]+)\s+trip/i);
+      if (toMatch && !['a', 'the', 'my', 'our'].includes(toMatch[1].toLowerCase())) {
+        destination = toMatch[1];
+      } else if (tripMatch && !['new', 'a', 'the', 'create', 'plan'].includes(tripMatch[1].toLowerCase())) {
+        destination = tripMatch[1];
+      }
+
+      const formattedDest =
+        destination !== 'TBD'
+          ? destination.charAt(0).toUpperCase() + destination.slice(1).toLowerCase()
+          : 'Adventure';
+
+      const tripName = `${formattedDest} Trip`;
+      const now = new Date();
+      const startDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const endDate = new Date(startDate.getTime() + 5 * 24 * 60 * 60 * 1000);
+
+      const trip = await this.prisma.trip.create({
+        data: {
+          creatorId: userId,
+          name: tripName,
+          destination: formattedDest !== 'Adventure' ? formattedDest : undefined,
+          description: `Created with your AI Copilot for effortless group travel.`,
+          startDate,
+          endDate,
+          members: {
+            create: {
+              userId,
+              role: 'OWNER',
+            },
+          },
+        },
+      });
+
+      return {
+        actionType: 'TRIP_CREATED',
+        message: `🎉 Your trip "${trip.name}" is ready! You can now invite friends, track group expenses, and coordinate activities.`,
+        trip: {
+          id: trip.id,
+          name: trip.name,
+          destination: trip.destination || undefined,
+          startDate: trip.startDate?.toISOString().split('T')[0],
+          endDate: trip.endDate?.toISOString().split('T')[0],
+        },
+        suggestedActions: [
+          {
+            label: 'Open Trip Workspace',
+            actionType: 'NAVIGATE',
+            targetPath: `/trips/${trip.id}`,
+          },
+        ],
+      };
+    }
+
+    // Resolve target trip for trip-specific actions (expenses, tasks, Q&A)
+    let targetTripId = tripId;
+    if (!targetTripId) {
+      const latestRole = await this.prisma.tripRole.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+      });
+      targetTripId = latestRole?.tripId;
+    }
+
+    if (!targetTripId) {
+      return {
+        actionType: 'ANSWER',
+        message: 'You don\'t have any trips yet. You can type "Create a trip to Manali" to start planning!',
+        suggestedActions: [],
+      };
+    }
+
+    // 2. INTENT: EXPENSE LOGGING
+    const hasExpenseKeywords =
+      lower.includes('spent') ||
+      lower.includes('spend') ||
+      lower.includes('paid') ||
+      lower.includes('diye') ||
+      lower.includes('pay kiya') ||
+      lower.includes('bill') ||
+      lower.includes('expense') ||
+      lower.includes('de diye');
+    const hasMoneyNumbers = /\b\d+(?:\.\d+)?\s*(?:k|hazar|thousand|rs|rupees|rupaye|inr|₹)?\b/i.test(lower);
+
+    if (hasExpenseKeywords && hasMoneyNumbers) {
+      const proposal = await this.parseExpense(targetTripId, userId, rawInput);
+      if (proposal.amountMinor > 0 && proposal.payer) {
+        const participants = proposal.participants.length > 0 ? proposal.participants : [proposal.payer];
+        const baseSplit = Math.floor(proposal.amountMinor / participants.length);
+        const remainder = proposal.amountMinor - baseSplit * participants.length;
+        const splits = participants.map((p, idx) => ({
+          userId: p.id,
+          amount: idx === 0 ? baseSplit + remainder : baseSplit,
+        }));
+
+        const created = await this.prisma.expense.create({
+          data: {
+            tripId: targetTripId,
+            payerId: proposal.payer.id,
+            description: proposal.description || 'Dinner & food',
+            amount: Math.round(proposal.amountMinor),
+            currency: proposal.currency || 'INR',
+            category: 'EXPENSE',
+            splits: {
+              create: splits,
+            },
+          },
+        });
+
+        const amountFormatted = `₹${(proposal.amountMinor / 100).toFixed(2)}`;
+        const splitFormatted = `₹${(baseSplit / 100).toFixed(2)}`;
+
+        return {
+          actionType: 'EXPENSE_CREATED',
+          message: `💸 Added expense: "${proposal.description}" for ${amountFormatted}. Paid by ${proposal.payer.name} and split equally among ${participants.length} member(s).`,
+          expense: {
+            id: created.id,
+            description: proposal.description,
+            amountFormatted,
+            payerName: proposal.payer.name,
+            participantsCount: participants.length,
+            splitPerPersonFormatted: splitFormatted,
+          },
+          suggestedActions: [
+            {
+              label: 'View in Expenses',
+              actionType: 'VIEW_EXPENSE',
+              targetPath: `/trips/${targetTripId}/expenses`,
+            },
+          ],
+        };
+      }
+    }
+
+    // 3. INTENT: TASK CAPTURE
+    const hasTaskKeywords =
+      lower.includes('remind') ||
+      lower.includes('pack') ||
+      lower.includes('book') ||
+      lower.includes('arrange') ||
+      lower.includes('call') ||
+      lower.includes('bol dena') ||
+      lower.includes('bring');
+
+    if (hasTaskKeywords && !hasMoneyNumbers) {
+      const taskProposal = await this.parseTask(targetTripId, userId, rawInput);
+      if (taskProposal.title) {
+        const task = await this.prisma.task.create({
+          data: {
+            tripId: targetTripId,
+            creatorId: userId,
+            title: taskProposal.title,
+            assignedTo: taskProposal.assignee?.id || null,
+            dueDate: taskProposal.dueDate ? new Date(taskProposal.dueDate) : null,
+            status: 'OPEN',
+          },
+        });
+
+        return {
+          actionType: 'TASK_CREATED',
+          message: `📋 Added task: "${task.title}"${taskProposal.assignee ? ` assigned to ${taskProposal.assignee.name}` : ''}${taskProposal.dueDate ? ` (due ${taskProposal.dueDate})` : ''}.`,
+          task: {
+            id: task.id,
+            title: task.title,
+            assigneeName: taskProposal.assignee?.name,
+            dueDateFormatted: taskProposal.dueDate || undefined,
+            priority: taskProposal.priority || 'MEDIUM',
+          },
+          suggestedActions: [
+            {
+              label: 'View in Itinerary',
+              actionType: 'VIEW_TASK',
+              targetPath: `/trips/${targetTripId}/itinerary`,
+            },
+          ],
+        };
+      }
+    }
+
+    // 4. INTENT: GROUNDED Q&A
+    const qa = await this.askTripOS(targetTripId, userId, rawInput);
+    return {
+      actionType: 'ANSWER',
+      message: qa.answer,
+      suggestedActions: qa.suggestedActions,
+    };
   }
 }

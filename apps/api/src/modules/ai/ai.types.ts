@@ -84,3 +84,37 @@ export interface TripBriefingResponse {
   recommendedNextAction: string;
   generatedAt: string;
 }
+
+export type UnifiedActionType = 'TRIP_CREATED' | 'EXPENSE_CREATED' | 'TASK_CREATED' | 'ANSWER';
+
+export interface UnifiedChatResponse {
+  actionType: UnifiedActionType;
+  message: string;
+  trip?: {
+    id: string;
+    name: string;
+    destination?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  expense?: {
+    id: string;
+    description: string;
+    amountFormatted: string;
+    payerName: string;
+    participantsCount: number;
+    splitPerPersonFormatted: string;
+  };
+  task?: {
+    id: string;
+    title: string;
+    assigneeName?: string;
+    dueDateFormatted?: string;
+    priority: string;
+  };
+  suggestedActions?: Array<{
+    label: string;
+    actionType: string;
+    targetPath?: string;
+  }>;
+}

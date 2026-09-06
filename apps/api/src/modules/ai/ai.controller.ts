@@ -5,7 +5,7 @@
 
 import { Controller, Post, Get, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength, IsOptional } from 'class-validator';
 import { JwtGuard } from '../auth/guards/jwt.guard';
 import { AIService } from './ai.service';
 
@@ -113,6 +113,44 @@ export class AIController {
     @Req() req: any,
   ) {
     return this.aiService.getBriefing(tripId, req.user.sub);
+  }
+
+  /**
+   * Single unified conversational chat endpoint for trip-scoped AI interactions.
+   */
+  @Post('chat')
+  @ApiOperation({ summary: 'Unified conversational AI assistant for trip actions' })
+  async tripChat(
+    @Param('tripId') tripId: string,
+    @Body() dto: ParseTextDto,
+    @Req() req: any,
+  ) {
+    return this.aiService.processUnifiedChat(req.user.sub, dto.text, tripId);
+  }
+}
+
+export class GlobalChatDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  text!: string;
+
+  @IsString()
+  @IsOptional()
+  tripId?: string;
+}
+
+@ApiTags('ai')
+@Controller('ai')
+@UseGuards(JwtGuard)
+@ApiBearerAuth()
+export class GlobalAIController {
+  constructor(private readonly aiService: AIService) {}
+
+  @Post('chat')
+  @ApiOperation({ summary: 'Unified conversational AI copilot entry point' })
+  async chat(@Body() dto: GlobalChatDto, @Req() req: any) {
+    return this.aiService.processUnifiedChat(req.user.sub, dto.text, dto.tripId);
   }
 }
 
