@@ -62,7 +62,7 @@ export default function LoginPage() {
           </p>
 
           <div className="space-y-2.5 pt-4 text-xs text-indigo-100">
-            {['Zero math arguments with automated settlement', 'Shared itinerary timeline with live updates', 'Offline-friendly document vault for vouchers'].map((item) => (
+            {['Zero math arguments with automated settlement', 'Shared itinerary timeline with live updates', 'Centralized document vault for tickets & vouchers'].map((item) => (
               <div key={item} className="flex items-center gap-2.5">
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/30 text-emerald-300">
                   <Check className="h-3 w-3" />

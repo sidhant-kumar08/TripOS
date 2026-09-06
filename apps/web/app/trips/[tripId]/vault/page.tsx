@@ -125,7 +125,7 @@ export default function VaultPage() {
   return (
     <PageShell
       title="Trip Vault"
-      subtitle="Encrypted, offline-ready storage for boarding passes, Airbnb vouchers, and documents."
+      subtitle="Shared cloud storage for boarding passes, Airbnb vouchers, and travel documents."
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },
         { label: 'Trip Overview', href: `/trips/${tripId}` },

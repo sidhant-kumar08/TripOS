@@ -273,8 +273,8 @@ export default function LandingPage() {
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-bold text-slate-900 dark:text-white">Offline Vault</p>
-                  <p className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">Synced for all travelers</p>
+                  <p className="font-bold text-slate-900 dark:text-white">Document Vault</p>
+                  <p className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">Shared with all travelers</p>
                 </div>
               </motion.div>
 
@@ -440,7 +440,7 @@ export default function LandingPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" /> Checklist & Vault
                           </span>
                           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
-                            Synced Offline
+                            Shared Vault
                           </span>
                         </div>
                         <h3 className="font-bold text-slate-900 dark:text-white text-sm">
@@ -851,7 +851,7 @@ export default function LandingPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Encrypted Travel Vault</h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Centralized offline-accessible repository for the entire squad</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Centralized secure document repository for the entire squad</p>
                       </div>
                       <Badge variant="success">Passports & Vouchers Secured</Badge>
                     </div>
@@ -1068,7 +1068,7 @@ export default function LandingPage() {
 
             <div className="trip-glass-card rounded-3xl p-5 shadow-sm space-y-3">
               <p className="text-xs text-slate-700 dark:text-slate-300 italic leading-relaxed">
-                &ldquo;Having the boarding passes and Airbnb entry codes in the Vault saved us when we had zero cellular connection in the Italian mountains.&rdquo;
+                &ldquo;Having all our boarding passes and Airbnb entry codes organized in the shared Vault saved us hours of digging through WhatsApp chats.&rdquo;
               </p>
               <div className="flex items-center gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white">
@@ -1125,7 +1125,7 @@ export default function LandingPage() {
               {[
                 ['Scattered WhatsApp messages and lost screenshots', 'Single unified real-time dashboard for the entire trip'],
                 ['"Who owes what?" arguments after the trip ends', 'Deterministic math with automated debt-simplification settlement'],
-                ['Lost PDF tickets and panic at boarding gates', 'Offline-friendly centralized vault for all group travel files'],
+                ['Lost PDF tickets and panic at boarding gates', 'Centralized group vault for all travel passes, tickets, and vouchers'],
                 ['One person gets stuck doing all the planning', 'Collaborative delegation with task owners and due dates'],
                 ['Clunky spreadsheets broken on mobile screens', 'Mobile-first fluid responsive design designed for on-the-go thumb use'],
               ].map(([oldWay, newWay], i) => (
@@ -1215,7 +1215,7 @@ export default function LandingPage() {
               },
               {
                 q: 'Is TripOS mobile-friendly?',
-                a: 'TripOS is built 100% mobile-first. You get a fluid, native-app-like experience on iPhones, Androids, tablets, and desktops with offline vault accessibility.',
+                a: 'TripOS is built 100% mobile-first. You get a fluid, native-app-like experience on iPhones, Androids, tablets, and desktops with instant access to shared documents and expenses.',
               },
             ].map((faq, idx) => (
               <div
