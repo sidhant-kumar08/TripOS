@@ -26,6 +26,8 @@ import {
   Play,
   ShieldCheck,
   Star,
+  Globe,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/shared/navbar';
@@ -551,23 +553,50 @@ export default function LandingPage() {
           </motion.div>
 
           {/* Trust stats row */}
-          <div className="mt-8 max-w-4xl mx-auto rounded-2xl border border-slate-200/60 bg-white/60 p-4 shadow-glass-sm backdrop-blur-md dark:border-slate-800/60 dark:bg-slate-900/50">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="text-center">
-                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">100%</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Auditable Settlements</p>
+          <div className="mt-8 max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
+              {/* Stat 1: Audit */}
+              <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-emerald-100/90 bg-white/90 dark:border-emerald-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-900">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-emerald-100/90 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                  <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">100%</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Auditable Ledger</p>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">0 Math</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Disputes & Friction</p>
+
+              {/* Stat 2: 0 Math */}
+              <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-indigo-100/90 bg-white/90 dark:border-indigo-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-indigo-100/90 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300 shrink-0">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">0 Math</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Auto Simplifier</p>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">Multi-Currency</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">INR, USD, EUR, GBP</p>
+
+              {/* Stat 3: Multi-Currency */}
+              <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-blue-100/90 bg-white/90 dark:border-blue-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-blue-100/90 text-blue-600 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+                  <Globe className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Multi-FX</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">INR, USD, EUR</p>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">100% Mobile</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Fast on any phone</p>
+
+              {/* Stat 4: Fast on Mobile */}
+              <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-purple-100/90 bg-white/90 dark:border-purple-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-purple-200 dark:hover:border-purple-900">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-purple-100/90 text-purple-600 dark:bg-purple-950 dark:text-purple-300 shrink-0">
+                  <Smartphone className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Fast PWA</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">iOS & Android</p>
+                </div>
               </div>
             </div>
           </div>
