@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { CreateTaskDto, UpdateTaskDto } from './dtos/task.dto';
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cache: MemoryCacheService,
+  ) {}
 
   async createTask(tripId: string, userId: string, dto: CreateTaskDto) {
     const membership = await this.verifyTripMembership(tripId, userId);
@@ -23,6 +27,8 @@ export class TasksService {
         status: 'OPEN',
       },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return {
       ...this.formatTask(task),
@@ -48,6 +54,10 @@ export class TasksService {
   }
 
   async listTasksByTrip(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:tasks`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     await this.verifyTripMembership(tripId, userId);
 
     const tasks = await this.prisma.task.findMany({
@@ -58,7 +68,9 @@ export class TasksService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return tasks.map((t: any) => this.formatTask(t));
+    const result = tasks.map((t: any) => this.formatTask(t));
+    this.cache.set(cacheKey, result, 20);
+    return result;
   }
 
   async listTasksByAssignee(tripId: string, userId: string) {
@@ -124,6 +136,8 @@ export class TasksService {
       },
     });
 
+    this.cache.invalidateTrip(tripId);
+
     return {
       ...this.formatTask(updated),
       priority: dto.priority || (task as any).priority || 'MEDIUM',
@@ -153,6 +167,8 @@ export class TasksService {
     await this.prisma.task.delete({
       where: { id: taskId },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return { success: true, message: 'Task deleted successfully' };
   }

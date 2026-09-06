@@ -13,6 +13,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingModule } from './common/logging/logging.module';
 import { DailyFileLogService } from './common/logging/daily-file-log.service';
 import { StorageModule } from './common/storage.module';
+import { DatabaseModule } from './common/database.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -22,6 +23,7 @@ import { AppController } from './app.controller';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    DatabaseModule,
     LoggingModule,
     StorageModule,
     LoggerModule.forRootAsync({

@@ -6,6 +6,7 @@
 
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import {
   TripOverviewResponseDto,
   TripReadinessSummary,
@@ -19,30 +20,22 @@ import {
 
 @Injectable()
 export class CommandCenterService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: MemoryCacheService,
+  ) {}
 
   /**
    * Retrieves the unified Trip Command Center overview for a user.
    */
   async getTripOverview(tripId: string, userId: string): Promise<TripOverviewResponseDto> {
-    // 1. Verify membership and permissions
-    const membership = await this.prisma.tripRole.findUnique({
-      where: {
-        tripId_userId: {
-          tripId,
-          userId,
-        },
-      },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!membership) {
-      throw new ForbiddenException('You do not have permission to access this trip.');
+    const cacheKey = `trip:${tripId}:overview:${userId}`;
+    const cached = this.cache.get<TripOverviewResponseDto>(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    // 2. Fetch authoritative domain records in parallel
+    // 1. Fetch authoritative domain records in parallel
     const [trip, tasks, activities, expenses, vault, invitations] = await Promise.all([
       this.prisma.trip.findUnique({
         where: { id: tripId },
@@ -101,6 +94,11 @@ export class CommandCenterService {
       throw new NotFoundException('Trip not found.');
     }
 
+    const isMember = trip.members.some((m) => m.userId === userId);
+    if (!isMember) {
+      throw new ForbiddenException('You do not have permission to access this trip.');
+    }
+
     const now = new Date();
     const vaultFiles = vault?.files || [];
 
@@ -128,7 +126,7 @@ export class CommandCenterService {
     // 8. Compute Progress Counters & Days Countdown
     const progress = this.computeProgress(trip, tasks, activities, vaultFiles, now);
 
-    return {
+    const overview: TripOverviewResponseDto = {
       trip: {
         id: trip.id,
         name: trip.name,
@@ -150,6 +148,9 @@ export class CommandCenterService {
       financialSnapshot,
       progress,
     };
+
+    this.cache.set(cacheKey, overview, 30);
+    return overview;
   }
 
   /**

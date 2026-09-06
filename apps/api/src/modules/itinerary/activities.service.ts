@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { CreateActivityDto, UpdateActivityDto, UpdateActivityParticipantDto } from './dtos/activity.dto';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cache: MemoryCacheService,
+  ) {}
 
   async createActivity(tripId: string, userId: string, dto: CreateActivityDto) {
     // Verify user is at least a regular member (not GUEST)
@@ -43,6 +47,8 @@ export class ActivitiesService {
       },
     });
 
+    this.cache.invalidateTrip(tripId);
+
     return this.formatActivity(activity);
   }
 
@@ -64,6 +70,10 @@ export class ActivitiesService {
   }
 
   async listActivities(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:activities`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     await this.verifyTripMembership(tripId, userId);
 
     const activities = await this.prisma.activity.findMany({
@@ -74,7 +84,9 @@ export class ActivitiesService {
       orderBy: { startTime: 'asc' },
     });
 
-    return activities.map((a: any) => this.formatActivity(a));
+    const result = activities.map((a: any) => this.formatActivity(a));
+    this.cache.set(cacheKey, result, 20);
+    return result;
   }
 
   async updateActivity(
@@ -116,6 +128,8 @@ export class ActivitiesService {
       },
     });
 
+    this.cache.invalidateTrip(tripId);
+
     return this.formatActivity(updated);
   }
 
@@ -134,6 +148,8 @@ export class ActivitiesService {
     await this.prisma.activity.delete({
       where: { id: activityId },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return { success: true };
   }
@@ -171,6 +187,8 @@ export class ActivitiesService {
         status: dto.status as any,
       },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return { success: true, participant: updated };
   }

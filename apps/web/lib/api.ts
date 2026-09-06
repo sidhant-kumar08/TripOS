@@ -1,11 +1,21 @@
-/**
- * @file api.ts
- * @description Central Axios HTTP client for TripOS web application.
- * Automatically injects JWT Bearer tokens from localStorage and handles 401 redirects.
- */
-
 import axios, { AxiosInstance } from 'axios';
 import { API_BASE_URL } from './runtime-config';
+
+// Client-side Memory Cache for instantaneous tab switches
+const clientCache = new Map<string, { data: any; status: number; headers: any; timestamp: number }>();
+const CLIENT_CACHE_TTL_MS = 15000; // 15 seconds
+
+export function invalidateClientCache(pattern?: string | RegExp) {
+  if (!pattern) {
+    clientCache.clear();
+    return;
+  }
+  for (const key of Array.from(clientCache.keys())) {
+    if (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key)) {
+      clientCache.delete(key);
+    }
+  }
+}
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -15,20 +25,62 @@ const api: AxiosInstance = axios.create({
   withCredentials: true,
 });
 
-// Add token to requests
+// Add token to requests & serve from memory cache if valid
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
+
+  // Handle client-side cache for GET requests
+  const method = (config.method || 'get').toLowerCase();
+  if (method === 'get') {
+    const cacheKey = `${config.url || ''}:${JSON.stringify(config.params || {})}`;
+    const cached = clientCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+      // Return cached response via custom adapter-like resolved promise
+      config.adapter = async () => ({
+        data: cached.data,
+        status: cached.status,
+        statusText: 'OK (Memory Cache)',
+        headers: cached.headers,
+        config,
+        request: {},
+      });
+    }
+  } else {
+    // Invalidate client cache on any write mutation (POST, PUT, DELETE, PATCH)
+    const url = config.url || '';
+    const tripMatch = url.match(/\/trips\/([^/]+)/);
+    if (tripMatch) {
+      invalidateClientCache(tripMatch[1]);
+    } else {
+      invalidateClientCache();
+    }
+  }
+
   return config;
 });
 
-// Handle token refresh on 401
+// Handle caching responses and token refresh on 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = (response.config.method || 'get').toLowerCase();
+    if (method === 'get' && response.status === 200) {
+      const cacheKey = `${response.config.url || ''}:${JSON.stringify(response.config.params || {})}`;
+      clientCache.set(cacheKey, {
+        data: response.data,
+        status: response.status,
+        headers: response.headers,
+        timestamp: Date.now(),
+      });
+    }
+    return response;
+  },
   async (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('accessToken');
       window.location.href = '/auth/login';
     }

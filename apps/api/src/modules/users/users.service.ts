@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, UnauthorizedException, Logger } from '@nestjs/common';
 import { hash, verify } from 'argon2';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { SupabaseStorageService } from '@/common/services/supabase-storage.service';
 import { UpdateProfileDto, ChangePasswordDto } from './dtos/users.dto';
 
@@ -13,9 +14,14 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: SupabaseStorageService,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async getProfile(userId: string) {
+    const cacheKey = `user:${userId}:profile`;
+    const cached = this.cache.get<any>(cacheKey);
+    if (cached) return cached;
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -35,6 +41,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    this.cache.set(cacheKey, user, 60);
     return user;
   }
 
@@ -90,6 +97,7 @@ export class UsersService {
       },
     });
 
+    this.cache.invalidateUser(userId);
     return updated;
   }
 
@@ -119,6 +127,7 @@ export class UsersService {
       },
     });
 
+    this.cache.invalidateUser(userId);
     return updated;
   }
 
@@ -144,6 +153,8 @@ export class UsersService {
       where: { id: userId },
       data: { passwordHash: newPasswordHash },
     });
+
+    this.cache.invalidateUser(userId);
 
     return {
       message: 'Password updated successfully',

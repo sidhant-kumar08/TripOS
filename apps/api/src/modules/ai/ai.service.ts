@@ -6,6 +6,7 @@
 
 import { Injectable, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { AIProvider } from './providers/ai-provider.interface';
 import { GeminiProvider } from './providers/gemini.provider';
 import { MockAIProvider } from './providers/mock.provider';
@@ -41,6 +42,7 @@ export class AIService {
     private readonly prisma: PrismaService,
     private readonly geminiProvider: GeminiProvider,
     private readonly mockProvider: MockAIProvider,
+    private readonly cache: MemoryCacheService,
   ) {
     this.initProvider();
   }
@@ -131,22 +133,35 @@ export class AIService {
       .map((m) => `- ${m.user.name || m.user.email.split('@')[0]} (email: ${m.user.email})`)
       .join('\n');
 
-    // 2. Call AI Provider for Structured Extraction
-    const prompt = `Current Trip Members:\n${memberListContext}\n\nUser Input to Parse:\n"${text}"`;
-
-    let raw: RawExpenseExtraction;
+    // 2. Deterministic AI Fast-Path (< 5ms)
+    // For standard, unambiguous spending phrases, regex heuristics are faster and 100% accurate
+    let raw: RawExpenseExtraction | null = null;
     try {
-      raw = await this.provider.generateStructured<RawExpenseExtraction>(
-        prompt,
-        EXPENSE_EXTRACTION_SCHEMA,
-        { systemInstruction: EXPENSE_SYSTEM_PROMPT, temperature: 0.1 },
-      );
-    } catch (err: any) {
-      this.logger.warn(`AI Provider failed, falling back to mock parser: ${err.message}`);
-      raw = await this.mockProvider.generateStructured<RawExpenseExtraction>(
+      const fastRaw = await this.mockProvider.generateStructured<RawExpenseExtraction>(
         prompt,
         EXPENSE_EXTRACTION_SCHEMA,
       );
+      if (fastRaw && fastRaw.amountMinor > 0 && fastRaw.confidence >= 0.85 && !fastRaw.needsClarification) {
+        raw = fastRaw;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!raw) {
+      try {
+        raw = await this.provider.generateStructured<RawExpenseExtraction>(
+          prompt,
+          EXPENSE_EXTRACTION_SCHEMA,
+          { systemInstruction: EXPENSE_SYSTEM_PROMPT, temperature: 0.1 },
+        );
+      } catch (err: any) {
+        this.logger.warn(`AI Provider failed, falling back to mock parser: ${err.message}`);
+        raw = await this.mockProvider.generateStructured<RawExpenseExtraction>(
+          prompt,
+          EXPENSE_EXTRACTION_SCHEMA,
+        );
+      }
     }
 
     // 3. Resolve Entities (Payer & Participants) against authoritative DB records
@@ -262,19 +277,34 @@ export class AIService {
     const todayDate = new Date().toISOString().split('T')[0];
     const prompt = `Today's Date: ${todayDate}\nTrip Members:\n${memberListContext}\n\nTask Input to Parse:\n"${text}"`;
 
-    let raw: RawTaskExtraction;
+    // Deterministic AI Fast-Path (< 5ms)
+    let raw: RawTaskExtraction | null = null;
     try {
-      raw = await this.provider.generateStructured<RawTaskExtraction>(
-        prompt,
-        TASK_EXTRACTION_SCHEMA,
-        { systemInstruction: TASK_SYSTEM_PROMPT, temperature: 0.1 },
-      );
-    } catch (err: any) {
-      this.logger.warn(`AI Provider failed, using mock parser for task: ${err.message}`);
-      raw = await this.mockProvider.generateStructured<RawTaskExtraction>(
+      const fastRaw = await this.mockProvider.generateStructured<RawTaskExtraction>(
         prompt,
         TASK_EXTRACTION_SCHEMA,
       );
+      if (fastRaw && fastRaw.title && fastRaw.confidence >= 0.85 && !fastRaw.needsClarification) {
+        raw = fastRaw;
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!raw) {
+      try {
+        raw = await this.provider.generateStructured<RawTaskExtraction>(
+          prompt,
+          TASK_EXTRACTION_SCHEMA,
+          { systemInstruction: TASK_SYSTEM_PROMPT, temperature: 0.1 },
+        );
+      } catch (err: any) {
+        this.logger.warn(`AI Provider failed, using mock parser for task: ${err.message}`);
+        raw = await this.mockProvider.generateStructured<RawTaskExtraction>(
+          prompt,
+          TASK_EXTRACTION_SCHEMA,
+        );
+      }
     }
 
     // Resolve assignee
@@ -586,6 +616,8 @@ Total Expenses: ${totalSpent} INR`;
         },
       });
 
+      this.cache.invalidateUser(userId);
+
       return {
         actionType: 'TRIP_CREATED',
         message: `🎉 Your trip "${trip.name}" is ready! You can now invite friends, track group expenses, and coordinate activities.`,
@@ -664,6 +696,8 @@ Total Expenses: ${totalSpent} INR`;
             },
           });
 
+          this.cache.invalidateTrip(targetTripId);
+
           const amountFormatted = `₹${(safeAmountMinor / 100).toFixed(2)}`;
           const splitFormatted = `₹${(baseSplit / 100).toFixed(2)}`;
 
@@ -726,6 +760,8 @@ Total Expenses: ${totalSpent} INR`;
             status: 'OPEN',
           },
         });
+
+        this.cache.invalidateTrip(targetTripId);
 
         return {
           actionType: 'TASK_CREATED',

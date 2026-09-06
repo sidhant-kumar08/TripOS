@@ -11,12 +11,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { CreateTripDto, InviteMemberDto } from './dtos/trips.dto';
 import { randomBytes } from 'crypto';
 
 @Injectable()
 export class TripsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cache: MemoryCacheService,
+  ) {}
 
   /**
    * Creates a new trip workspace and assigns the creator as the OWNER.
@@ -65,6 +69,7 @@ export class TripsService {
       },
     });
 
+    this.cache.invalidateUser(userId);
     return this.formatTrip(trip);
   }
 
@@ -73,6 +78,10 @@ export class TripsService {
    * @throws {ForbiddenException} If requester is not an active member of this trip.
    */
   async getTripById(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:details:${userId}`;
+    const cached = this.cache.get<any>(cacheKey);
+    if (cached) return cached;
+
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -93,7 +102,9 @@ export class TripsService {
       throw new ForbiddenException('You are not a member of this trip');
     }
 
-    return this.formatTrip(trip);
+    const result = this.formatTrip(trip);
+    this.cache.set(cacheKey, result, 30);
+    return result;
   }
 
   /**
@@ -125,6 +136,9 @@ export class TripsService {
       where: { id: tripId },
     });
 
+    this.cache.invalidateTrip(tripId);
+    this.cache.invalidateUser(userId);
+
     return { success: true, message: 'Trip deleted successfully' };
   }
 
@@ -132,6 +146,10 @@ export class TripsService {
    * Lists all trips the user is a member of, sorted by most recently created.
    */
   async listUserTrips(userId: string) {
+    const cacheKey = `user:${userId}:trips`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     const trips = await this.prisma.trip.findMany({
       where: {
         members: {
@@ -152,7 +170,9 @@ export class TripsService {
       },
     });
 
-    return trips.map((trip: any) => this.formatTrip(trip));
+    const result = trips.map((trip: any) => this.formatTrip(trip));
+    this.cache.set(cacheKey, result, 20);
+    return result;
   }
 
   /**
@@ -213,6 +233,8 @@ export class TripsService {
         usedAt: null,
       },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return {
       id: invitation.id,
@@ -324,6 +346,9 @@ export class TripsService {
         data: { usedAt: new Date() },
       }),
     ]);
+
+    this.cache.invalidateTrip(invitation.tripId);
+    this.cache.invalidateUser(userId);
 
     return { success: true, message: 'Successfully joined trip' };
   }
@@ -494,6 +519,8 @@ export class TripsService {
         tripId,
       },
     });
+
+    this.cache.invalidateTrip(tripId);
 
     return { success: true, message: 'Invitation revoked' };
   }

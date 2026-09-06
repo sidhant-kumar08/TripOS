@@ -19,12 +19,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/common/services/prisma.service';
+import { MemoryCacheService } from '@/common/services/memory-cache.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dtos/expense.dto';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class ExpensesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cache: MemoryCacheService,
+  ) {}
 
   /**
    * Records a new group expense and triggers asynchronous ledger balance recalculation.
@@ -122,6 +126,9 @@ export class ExpensesService {
 
     // Synchronize pairwise balances table
     await this.recalculateBalances(tripId);
+
+    // Invalidate cached reads for this trip
+    this.cache.invalidateTrip(tripId);
 
     return this.formatExpense(expense);
   }
@@ -291,6 +298,7 @@ export class ExpensesService {
     }
 
     await this.recalculateBalances(tripId);
+    this.cache.invalidateTrip(tripId);
 
     return this.formatExpense(updated);
   }
@@ -370,6 +378,10 @@ export class ExpensesService {
    * Lists all expenses in a trip with creator metadata and edit counts.
    */
   async listExpenses(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:expenses:list:${userId}`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     await this.verifyTripMembership(tripId, userId);
 
     const expenses = await this.prisma.expense.findMany({
@@ -425,7 +437,7 @@ export class ExpensesService {
       // Ignore if table not populated
     }
 
-    return expenses.map((e: any) => ({
+    const result = expenses.map((e: any) => ({
       ...this.formatExpense(e),
       addedBy: createdByMap.get(e.id) || {
         id: e.payer?.id || e.payerId,
@@ -434,6 +446,9 @@ export class ExpensesService {
       },
       editCount: auditLogMap.get(e.id) || 1,
     }));
+
+    this.cache.set(cacheKey, result, 20);
+    return result;
   }
 
   /**
@@ -464,6 +479,7 @@ export class ExpensesService {
     });
 
     await this.recalculateBalances(tripId);
+    this.cache.invalidateTrip(tripId);
 
     return { success: true };
   }
@@ -472,6 +488,10 @@ export class ExpensesService {
    * Retrieves pairwise balances for the trip (e.g. User A owes User B $20).
    */
   async getBalances(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:expenses:balances:${userId}`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     await this.verifyTripMembership(tripId, userId);
 
     const balances = await this.prisma.expenseBalance.findMany({
@@ -490,13 +510,16 @@ export class ExpensesService {
     });
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    return balances.map((b: any) => ({
+    const result = balances.map((b: any) => ({
       fromUserId: b.fromUserId,
       fromUser: userMap.get(b.fromUserId) || { id: b.fromUserId, name: 'User' },
       toUserId: b.toUserId,
       toUser: userMap.get(b.toUserId) || { id: b.toUserId, name: 'User' },
       amount: b.balance,
     }));
+
+    this.cache.set(cacheKey, result, 20);
+    return result;
   }
 
   /**
@@ -513,6 +536,10 @@ export class ExpensesService {
    * 5. Adjust remaining amounts and advance pointers until all net balances equal 0.
    */
   async getSettlementSuggestions(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:expenses:settlements:${userId}`;
+    const cached = this.cache.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     await this.verifyTripMembership(tripId, userId);
 
     const balances = await this.prisma.expenseBalance.findMany({
@@ -583,6 +610,7 @@ export class ExpensesService {
       if (creditors[creditorIdx][1] === 0) creditorIdx++;
     }
 
+    this.cache.set(cacheKey, suggestions, 20);
     return suggestions;
   }
 
@@ -591,6 +619,10 @@ export class ExpensesService {
    * Fetches trip, expenses, audit counts, balances, and calculated settlement suggestions in parallel.
    */
   async getExpensesOverview(tripId: string, userId: string) {
+    const cacheKey = `trip:${tripId}:expenses:overview:${userId}`;
+    const cached = this.cache.get<any>(cacheKey);
+    if (cached) return cached;
+
     const [, trip, expenses, balances] = await Promise.all([
       this.verifyTripMembership(tripId, userId),
       this.prisma.trip.findUnique({
@@ -707,12 +739,15 @@ export class ExpensesService {
       if (creditors[creditorIdx][1] === 0) creditorIdx++;
     }
 
-    return {
+    const result = {
       trip,
       expenses: formattedExpenses,
       balances: formattedBalances,
       settlements: suggestions,
     };
+
+    this.cache.set(cacheKey, result, 30);
+    return result;
   }
 
   /**
