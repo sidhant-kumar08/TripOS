@@ -555,47 +555,47 @@ export default function LandingPage() {
           {/* Trust stats row */}
           <div className="mt-8 max-w-4xl mx-auto">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
-              {/* Stat 1: Audit */}
+              {/* Stat 1: Fair Splits */}
               <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-emerald-100/90 bg-white/90 dark:border-emerald-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-900">
                 <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-emerald-100/90 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
                   <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">100%</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Auditable Ledger</p>
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">100% Fair</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Transparent Splits</p>
                 </div>
               </div>
 
-              {/* Stat 2: 0 Math */}
+              {/* Stat 2: Zero IOUs */}
               <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-indigo-100/90 bg-white/90 dark:border-indigo-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900">
                 <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-indigo-100/90 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300 shrink-0">
                   <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">0 Math</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Auto Simplifier</p>
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Zero IOUs</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">No Awkward Reminders</p>
                 </div>
               </div>
 
-              {/* Stat 3: Multi-Currency */}
+              {/* Stat 3: Any Currency */}
               <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-blue-100/90 bg-white/90 dark:border-blue-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900">
                 <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-blue-100/90 text-blue-600 dark:bg-blue-950 dark:text-blue-300 shrink-0">
                   <Globe className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Multi-FX</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">INR, USD, EUR</p>
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Any Currency</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Travel Worldwide</p>
                 </div>
               </div>
 
-              {/* Stat 4: Fast on Mobile */}
+              {/* Stat 4: No App Needed */}
               <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-2xl border border-purple-100/90 bg-white/90 dark:border-purple-950/70 dark:bg-slate-900/90 shadow-glass-sm backdrop-blur-md transition-all hover:shadow-md hover:border-purple-200 dark:hover:border-purple-900">
                 <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-purple-100/90 text-purple-600 dark:bg-purple-950 dark:text-purple-300 shrink-0">
                   <Smartphone className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Fast PWA</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">iOS & Android</p>
+                  <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight">No App Needed</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate">Works on Every Phone</p>
                 </div>
               </div>
             </div>
