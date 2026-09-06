@@ -75,6 +75,7 @@ export default function LandingPage() {
   const [activeDemoTab, setActiveDemoTab] = React.useState<'itinerary' | 'expenses' | 'vault' | 'tasks'>('itinerary');
   const [demoCurrency, setDemoCurrency] = React.useState<string>('INR');
   const [demoExpenseAmount, setDemoExpenseAmount] = React.useState<number>(4000);
+  const [showcaseMobileTab, setShowcaseMobileTab] = React.useState<'plan' | 'spend' | 'checklist'>('plan');
 
   // Interactive Tasks state
   const [demoTasks, setDemoTasks] = React.useState([
@@ -275,94 +276,275 @@ export default function LandingPage() {
                 </div>
               </motion.div>
 
-              {/* Card Top Row with live showcase trip context */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-lg shadow-md shadow-indigo-600/25 shrink-0">
-                    <Compass className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base sm:text-lg font-bold font-display text-slate-900 dark:text-white">
-                        {SHOWCASE_TRIP.name}
-                      </h2>
-                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-300">
-                        {SHOWCASE_TRIP.badge}
-                      </span>
+              {/* ================= MOBILE VIEW (Compact, Interactive Travel Capsule) ================= */}
+              <div className="block sm:hidden">
+                {/* Mobile Header: Compact & balanced */}
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-600/25 shrink-0">
+                      <Compass className="h-5 w-5" />
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-3 w-3 text-indigo-500" /> {SHOWCASE_TRIP.location} • {SHOWCASE_TRIP.members.length} Travelers
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h2 className="text-sm font-bold font-display text-slate-900 dark:text-white truncate">
+                          {SHOWCASE_TRIP.name}
+                        </h2>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-indigo-500 shrink-0" />
+                        <span className="truncate">{SHOWCASE_TRIP.location}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Compact Live Status & Members Pill */}
+                  <div className="flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-800/80 px-2 py-1 rounded-full border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <div className="flex -space-x-1.5">
+                      {SHOWCASE_TRIP.members.slice(0, 3).map((name, i) => (
+                        <div
+                          key={i}
+                          className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-[8px] font-bold text-white ring-1 ring-white dark:ring-slate-900"
+                        >
+                          {name[0]}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">+1</span>
                   </div>
                 </div>
 
-                {/* Live Travelers Stack */}
-                <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
-                  <div className="flex -space-x-1.5">
-                    {SHOWCASE_TRIP.members.map((name, i) => (
-                      <div
-                        key={i}
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900"
-                        title={name}
+                {/* Mobile Segmented Tab Selector */}
+                <div className="grid grid-cols-3 gap-1 bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl mt-3">
+                  <button
+                    onClick={() => setShowcaseMobileTab('plan')}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      showcaseMobileTab === 'plan'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <Clock className="h-3 w-3" />
+                    <span>Plan</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowcaseMobileTab('spend')}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      showcaseMobileTab === 'spend'
+                        ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <DollarSign className="h-3 w-3" />
+                    <span>Spend</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowcaseMobileTab('checklist')}
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      showcaseMobileTab === 'checklist'
+                        ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-sm font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Vault</span>
+                  </button>
+                </div>
+
+                {/* Tab Content Display */}
+                <div className="mt-3">
+                  <AnimatePresence mode="wait">
+                    {showcaseMobileTab === 'plan' && (
+                      <motion.div
+                        key="plan"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.2 }}
+                        className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3.5 dark:border-indigo-950 dark:bg-indigo-950/30"
                       >
-                        {name[0]}
-                      </div>
-                    ))}
-                  </div>
-                  <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                    {SHOWCASE_TRIP.members.length} Active
-                  </span>
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" /> Scheduled Next
+                          </span>
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+                            Day 1
+                          </span>
+                        </div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                          {SHOWCASE_TRIP.nextActivity}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                          <span>{SHOWCASE_TRIP.nextTime}</span>
+                          <span>•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">All 4 confirmed</span>
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {showcaseMobileTab === 'spend' && (
+                      <motion.div
+                        key="spend"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.2 }}
+                        className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3.5 dark:border-emerald-950 dark:bg-emerald-950/30"
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                            <DollarSign className="h-3.5 w-3.5" /> Group Expenses
+                          </span>
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                            Balanced (0 IOU)
+                          </span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                            {formatCurrency(SHOWCASE_TRIP.totalSpend, SHOWCASE_TRIP.currency)}
+                          </h3>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                            {formatCurrency(SHOWCASE_TRIP.totalSpend / SHOWCASE_TRIP.members.length, SHOWCASE_TRIP.currency)} / person
+                          </p>
+                        </div>
+                        {/* 4 equal split indicators */}
+                        <div className="mt-2.5 flex items-center gap-1">
+                          {SHOWCASE_TRIP.members.map((m, idx) => (
+                            <div key={idx} className="flex-1">
+                              <div className="h-1.5 rounded-full bg-emerald-500/70"></div>
+                              <p className="text-[9px] text-center text-slate-500 dark:text-slate-400 mt-0.5 truncate">{m}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {showcaseMobileTab === 'checklist' && (
+                      <motion.div
+                        key="checklist"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.2 }}
+                        className="rounded-2xl border border-purple-100 bg-purple-50/50 p-3.5 dark:border-purple-950 dark:bg-purple-950/30"
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className="font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Checklist & Vault
+                          </span>
+                          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
+                            Synced Offline
+                          </span>
+                        </div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                          {SHOWCASE_TRIP.task}
+                        </h3>
+                        <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 flex items-center gap-1">
+                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{SHOWCASE_TRIP.vaultDoc}</span>
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
-              {/* 3 Quick Grid Highlights Inside Hero */}
-              <div className="grid gap-3 sm:grid-cols-3 mt-4">
-                {/* 1. Next Activity */}
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 dark:border-indigo-950 dark:bg-indigo-950/20">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> Scheduled Plan
-                    </span>
-                    <Badge variant="accent">Day 1</Badge>
+              {/* ================= DESKTOP VIEW (Full 3-Column Bento Showcase) ================= */}
+              <div className="hidden sm:block">
+                {/* Card Top Row with live showcase trip context */}
+                <div className="flex items-center justify-between gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-lg shadow-md shadow-indigo-600/25 shrink-0">
+                      <Compass className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base sm:text-lg font-bold font-display text-slate-900 dark:text-white">
+                          {SHOWCASE_TRIP.name}
+                        </h2>
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-300">
+                          {SHOWCASE_TRIP.badge}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                        <MapPin className="h-3 w-3 text-indigo-500" /> {SHOWCASE_TRIP.location} • {SHOWCASE_TRIP.members.length} Travelers
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">
-                    {SHOWCASE_TRIP.nextActivity}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    {SHOWCASE_TRIP.nextTime}
-                  </p>
+
+                  {/* Live Travelers Stack */}
+                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
+                    <div className="flex -space-x-1.5">
+                      {SHOWCASE_TRIP.members.map((name, i) => (
+                        <div
+                          key={i}
+                          className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900"
+                          title={name}
+                        >
+                          {name[0]}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                      {SHOWCASE_TRIP.members.length} Active
+                    </span>
+                  </div>
                 </div>
 
-                {/* 2. Group Spend Live Glance */}
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5 dark:border-emerald-950 dark:bg-emerald-950/20">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" /> Total Spend
-                    </span>
-                    <Badge variant="success">Balanced</Badge>
+                {/* 3 Quick Grid Highlights Inside Hero */}
+                <div className="grid gap-3 sm:grid-cols-3 mt-4">
+                  {/* 1. Next Activity */}
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 dark:border-indigo-950 dark:bg-indigo-950/20">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> Scheduled Plan
+                      </span>
+                      <Badge variant="accent">Day 1</Badge>
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">
+                      {SHOWCASE_TRIP.nextActivity}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      {SHOWCASE_TRIP.nextTime}
+                    </p>
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
-                    {formatCurrency(SHOWCASE_TRIP.totalSpend, SHOWCASE_TRIP.currency)}
-                  </h3>
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                    {formatCurrency(SHOWCASE_TRIP.totalSpend / SHOWCASE_TRIP.members.length, SHOWCASE_TRIP.currency)} / person
-                  </p>
-                </div>
 
-                {/* 3. Real-time Tasks */}
-                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3.5 dark:border-purple-950 dark:bg-purple-950/20">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Active Checklist
-                    </span>
-                    <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300">Ready</span>
+                  {/* 2. Group Spend Live Glance */}
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3.5 dark:border-emerald-950 dark:bg-emerald-950/20">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" /> Total Spend
+                      </span>
+                      <Badge variant="success">Balanced</Badge>
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                      {formatCurrency(SHOWCASE_TRIP.totalSpend, SHOWCASE_TRIP.currency)}
+                    </h3>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+                      {formatCurrency(SHOWCASE_TRIP.totalSpend / SHOWCASE_TRIP.members.length, SHOWCASE_TRIP.currency)} / person
+                    </p>
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">
-                    {SHOWCASE_TRIP.task}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    Document: {SHOWCASE_TRIP.vaultDoc}
-                  </p>
+
+                  {/* 3. Real-time Tasks */}
+                  <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3.5 dark:border-purple-950 dark:bg-purple-950/20">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Active Checklist
+                      </span>
+                      <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300">Ready</span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">
+                      {SHOWCASE_TRIP.task}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      Document: {SHOWCASE_TRIP.vaultDoc}
+                    </p>
+                  </div>
                 </div>
               </div>
             </motion.div>
