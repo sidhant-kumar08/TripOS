@@ -28,6 +28,7 @@ import { Modal } from '@/components/ui/modal';
 import { StatCard } from '@/components/shared/stat-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { formatDate } from '@/lib/utils';
+import { DashboardAIHub } from '@/components/dashboard/dashboard-ai-hub';
 
 interface Trip {
   id: string;
@@ -318,10 +319,10 @@ function DashboardContent() {
           variant="default"
         />
         <StatCard
-          label="Settlement Engine"
-          value="100% Active"
-          subtext="Auditable debt simplification"
-          icon={<Sparkles className="h-4 w-4" />}
+          label="AI Operations"
+          value="Operational"
+          subtext="Gemini & Indian NLP Copilot"
+          icon={<Sparkles className="h-4 w-4 text-amber-500" />}
           variant="success"
         />
         <StatCard
@@ -332,6 +333,11 @@ function DashboardContent() {
           variant="default"
         />
       </div>
+
+      {/* AI Intelligence Hub for Trips */}
+      {trips.length > 0 && (
+        <DashboardAIHub trips={trips} onDataChanged={loadData} />
+      )}
 
       {/* Filter and Search Bar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -420,6 +426,10 @@ function DashboardContent() {
                       🧭
                     </span>
                     <Badge variant="default">Workspace</Badge>
+                    <Badge variant="accent" className="text-[10px] py-0 px-1.5 font-medium">
+                      <Sparkles className="h-2.5 w-2.5 mr-0.5 text-amber-500" />
+                      AI Ready
+                    </Badge>
                   </div>
                   <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition duration-200 flex items-center gap-1">
                     Open <ArrowRight className="h-3.5 w-3.5" />

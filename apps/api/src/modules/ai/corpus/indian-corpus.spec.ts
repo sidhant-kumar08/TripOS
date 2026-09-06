@@ -275,6 +275,14 @@ describe('TripOS AI Indian Language Corpus & Safety Suite', () => {
       expect(result.suggestedActions.length).toBeGreaterThan(0);
       expect(result.suggestedActions.some((a) => a.actionType === 'VIEW_EXPENSE')).toBe(true);
     });
+
+    it('should accurately answer "What do I need to do?" with pending tasks', async () => {
+      const result = await aiService.askTripOS('trip-goa-456', 'user-me-123', 'What do I need to do?');
+
+      expect(result.answer).toBeDefined();
+      expect(result.answer).not.toContain('check the Expenses tab');
+      expect(result.suggestedActions.some((a) => a.actionType === 'VIEW_TASK')).toBe(true);
+    });
   });
 
   // ============================================================================

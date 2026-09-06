@@ -65,20 +65,92 @@ export class MockAIProvider implements AIProvider {
   }
 
   /**
-   * Generates grounded contextual answers based on keywords detected in the user query.
+   * Generates grounded contextual answers based on user query and parsed authorized trip context.
    */
   async generateText(prompt: string, _options?: AIOptions): Promise<string> {
-    const lower = prompt.toLowerCase();
-    if (lower.includes('owe') || lower.includes('balance') || lower.includes('money')) {
-      return 'Based on current trip records, check the Expenses tab for individual net balances and settlement suggestions.';
+    // 1. Extract the actual User Question
+    const qMatch = prompt.match(/User Question:\s*["']?([^"'\n]+)["']?/i);
+    const userQuestion = qMatch ? qMatch[1].trim() : prompt.trim();
+    const qLower = userQuestion.toLowerCase();
+
+    // 2. Extract Context Elements from the prompt
+    const tripMatch = prompt.match(/Trip:\s*"([^"]+)"(?:\s+to\s+([^.\n]+))?/i);
+    const tripName = tripMatch ? tripMatch[1] : 'your trip';
+    const destination = tripMatch && tripMatch[2] ? tripMatch[2].trim() : '';
+
+    const pendingTasksMatch = prompt.match(/User's Pending Tasks:\s*([^\n]+)/i);
+    const pendingTasksRaw = pendingTasksMatch ? pendingTasksMatch[1].trim() : 'None';
+    const hasPendingTasks = pendingTasksRaw !== 'None' && pendingTasksRaw.length > 0;
+
+    const totalTasksMatch = prompt.match(/Total Trip Tasks:\s*(\d+)\s*\(([^)]+)\)/i);
+    const tasksDone = totalTasksMatch ? totalTasksMatch[2] : '';
+
+    const totalExpensesMatch = prompt.match(/Total Group Expenses Recorded:\s*([^\n]+)/i);
+    const totalExpenses = totalExpensesMatch ? totalExpensesMatch[1].trim() : '0.00 INR';
+
+    const balanceMatch = prompt.match(/User Net Balance:\s*([^\n]+)/i);
+    const userBalance = balanceMatch ? balanceMatch[1].trim() : '';
+
+    // 3. Match Intent on User Question:
+
+    // A. Tasks / "What do I need to do?" / "What is pending?" / "What should I pack/bring?"
+    if (
+      qLower.includes('do') ||
+      qLower.includes('task') ||
+      qLower.includes('pending') ||
+      qLower.includes('need') ||
+      qLower.includes('pack') ||
+      qLower.includes('bring') ||
+      qLower.includes('action') ||
+      qLower.includes('todo')
+    ) {
+      if (hasPendingTasks) {
+        return `Based on trip records for "${tripName}", you have pending tasks: ${pendingTasksRaw}. Make sure to complete them before departure!`;
+      }
+      return `Great news! You currently have no pending tasks assigned to you for "${tripName}". ${tasksDone ? `The group has ${tasksDone} overall.` : ''}`;
     }
-    if (lower.includes('task') || lower.includes('pending') || lower.includes('do')) {
-      return 'You have active tasks visible under Next Up in the Command Center. Complete pending transport items first.';
+
+    // B. Expenses / Balances / "Who owes me?" / "How much do I owe?" / "How much spent?"
+    if (
+      qLower.includes('owe') ||
+      qLower.includes('balance') ||
+      qLower.includes('money') ||
+      qLower.includes('expense') ||
+      qLower.includes('spend') ||
+      qLower.includes('spent') ||
+      qLower.includes('cost') ||
+      qLower.includes('paid') ||
+      qLower.includes('hisab') ||
+      qLower.includes('paisa')
+    ) {
+      return `Your net balance for "${tripName}" is ${userBalance || 'balanced'}. Total group spend recorded is ${totalExpenses}. Check the Expenses tab for individual settlement pairs.`;
     }
-    if (lower.includes('ready') || lower.includes('readiness')) {
-      return 'Trip readiness is progressing well. Ensure all travel documents are saved in the Vault and pending tasks are assigned.';
+
+    // C. Readiness / "Are we ready?" / "Status"
+    if (
+      qLower.includes('ready') ||
+      qLower.includes('status') ||
+      qLower.includes('progress') ||
+      qLower.includes('prepared')
+    ) {
+      return `Trip readiness for "${tripName}": ${tasksDone || 'Tasks in progress'}, with ${totalExpenses} recorded in expenses. ${hasPendingTasks ? `You still have: ${pendingTasksRaw}.` : 'All your individual items are cleared!'}`;
     }
-    return 'TripOS is tracking your trip progress. You can manage expenses, itinerary activities, and vault documents anytime.';
+
+    // D. Itinerary / Dates / Destination / "Where are we going?" / "When are we leaving?"
+    if (
+      qLower.includes('where') ||
+      qLower.includes('when') ||
+      qLower.includes('date') ||
+      qLower.includes('destination') ||
+      qLower.includes('time') ||
+      qLower.includes('plan') ||
+      qLower.includes('schedule')
+    ) {
+      return `"${tripName}" ${destination ? `is heading to ${destination}` : ''}. You can view the full schedule and milestones in the Itinerary tab.`;
+    }
+
+    // E. General Fallback
+    return `For "${tripName}", you have ${hasPendingTasks ? `pending tasks (${pendingTasksRaw})` : 'no urgent tasks assigned'} and a net balance of ${userBalance || '₹0'}. You can ask about tasks, expenses, or itinerary anytime!`;
   }
 
   /**

@@ -371,7 +371,14 @@ User Net Balance: ${(netBalanceMinor / 100).toFixed(2)} INR (${netBalanceMinor >
 
     const suggestedActions: AskTripOSResponse['suggestedActions'] = [];
     const qLower = question.toLowerCase();
-    if (qLower.includes('task') || qLower.includes('todo') || qLower.includes('pending')) {
+    if (
+      qLower.includes('task') ||
+      qLower.includes('todo') ||
+      qLower.includes('pending') ||
+      qLower.includes('do') ||
+      qLower.includes('need') ||
+      qLower.includes('pack')
+    ) {
       suggestedActions.push({ label: 'View Tasks', actionType: 'VIEW_TASK', targetPath: `/trips/${tripId}/itinerary` });
     }
     if (qLower.includes('owe') || qLower.includes('money') || qLower.includes('expense') || qLower.includes('balance')) {
